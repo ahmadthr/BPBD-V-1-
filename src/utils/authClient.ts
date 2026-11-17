@@ -81,6 +81,12 @@ function getLocalStore(): LocalAuthStore {
     if (raw) {
       const parsed = JSON.parse(raw) as LocalAuthStore;
       if (Array.isArray(parsed.accounts) && parsed.roleConfigs) {
+        (Object.keys(parsed.roleConfigs) as RoleId[]).forEach((r) => {
+          const mods = parsed.roleConfigs[r]?.allowedModules;
+          if (Array.isArray(mods) && !mods.includes('kendaraan')) {
+            mods.push('kendaraan');
+          }
+        });
         return parsed;
       }
     }

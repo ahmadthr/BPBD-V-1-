@@ -73,6 +73,7 @@ const ROLE_ORDER: RoleId[] = [
 const MODULE_OPTIONS: { key: ModuleKey; label: string }[] = [
   { key: 'rbac_audit', label: 'Keamanan & RBAC' },
   { key: 'kib', label: 'Master KIB A–F' },
+  { key: 'kendaraan', label: 'Kendaraan R4/R2' },
   { key: 'mutasi', label: 'Approval Mutasi' },
   { key: 'qr_scanner', label: 'Scanner QR' },
   { key: 'dashboard', label: 'Dashboard Eksekutif' },

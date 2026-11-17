@@ -8,11 +8,14 @@ import { OpnameReportView } from './components/OpnameReportView';
 import { QrScannerView } from './components/QrScannerView';
 import { RbacAuditView } from './components/RbacAuditView';
 import { Sidebar } from './components/Sidebar';
+import { VehicleInventoryView } from './components/VehicleInventoryView';
 import {
   INITIAL_ASSETS,
   INITIAL_DAMAGE_REPORTS,
   INITIAL_LOCATIONS,
   INITIAL_MUTATIONS,
+  INITIAL_VEHICLES,
+  INITIAL_VEHICLE_MAINTENANCE,
   ROLE_PROFILES,
 } from './data/initialData';
 import {
@@ -28,6 +31,8 @@ import {
   OpnameStatus,
   RoleId,
   RoleProfile,
+  VehicleItem,
+  VehicleMaintenanceRecord,
 } from './types/simas';
 import {
   apiGetRbacConfig,
@@ -43,11 +48,14 @@ interface PersistedDomainState {
   assets: AssetItem[];
   mutations: AssetMutation[];
   damageReports: DamageReport[];
+  vehicles: VehicleItem[];
+  vehicleMaintenances: VehicleMaintenanceRecord[];
 }
 
 const MODULE_TITLES: Record<ModuleKey, string> = {
   dashboard: 'Dashboard Eksekutif',
   kib: 'Manajemen KIB A–F',
+  kendaraan: 'Inventaris Kendaraan (Roda 4 & Roda 2)',
   qr_scanner: 'QR Code & Pemindai Lapangan',
   mutasi: 'Mutasi & Lokasi Aset',
   opname_laporan: 'Opname Fisik & Pelaporan Kerusakan',
@@ -94,6 +102,12 @@ function loadInitialDomainState(): PersistedDomainState {
           assets: parsed.assets,
           mutations: parsed.mutations,
           damageReports: parsed.damageReports,
+          vehicles: Array.isArray(parsed.vehicles)
+            ? parsed.vehicles
+            : INITIAL_VEHICLES,
+          vehicleMaintenances: Array.isArray(parsed.vehicleMaintenances)
+            ? parsed.vehicleMaintenances
+            : INITIAL_VEHICLE_MAINTENANCE,
         };
       }
     }
@@ -104,6 +118,8 @@ function loadInitialDomainState(): PersistedDomainState {
     assets: INITIAL_ASSETS,
     mutations: INITIAL_MUTATIONS,
     damageReports: INITIAL_DAMAGE_REPORTS,
+    vehicles: INITIAL_VEHICLES,
+    vehicleMaintenances: INITIAL_VEHICLE_MAINTENANCE,
   };
 }
 
@@ -136,7 +152,7 @@ export default function App() {
   const initialSession = useMemo(() => loadStoredSession(), []);
 
   const [session, setSession] = useState<AuthSession | null>(initialSession);
-  const [showLoginScreen, setShowLoginScreen] = useState<boolean>(false);
+  const [showLoginScreen, setShowLoginScreen] = useState<boolean>(!initialSession);
   const [sessionNotice, setSessionNotice] = useState<string>('');
   const [remainingSeconds, setRemainingSeconds] = useState<number>(() =>
     initialSession
@@ -153,6 +169,10 @@ export default function App() {
   const [damageReports, setDamageReports] = useState<DamageReport[]>(
     initialDomain.damageReports
   );
+  const [vehicles, setVehicles] = useState<VehicleItem[]>(initialDomain.vehicles);
+  const [vehicleMaintenances, setVehicleMaintenances] = useState<
+    VehicleMaintenanceRecord[]
+  >(initialDomain.vehicleMaintenances);
   const [activeModule, setActiveModule] = useState<ModuleKey>(
     initialSession ? initialSession.user.redirectModule : 'dashboard'
   );
@@ -166,19 +186,21 @@ export default function App() {
 
   const locations = INITIAL_LOCATIONS;
 
-  // Persist KIB domain data
+  // Persist KIB & Vehicle domain data
   useEffect(() => {
     try {
       const payload: PersistedDomainState = {
         assets,
         mutations,
         damageReports,
+        vehicles,
+        vehicleMaintenances,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Ignore storage quota issues
     }
-  }, [assets, mutations, damageReports]);
+  }, [assets, mutations, damageReports, vehicles, vehicleMaintenances]);
 
   // Verify stored session & load live RBAC config + user directory
   useEffect(() => {
@@ -277,9 +299,9 @@ export default function App() {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     setSession(null);
     setActiveModule('dashboard');
-    setShowLoginScreen(false);
-    setToastMessage('Anda telah keluar. Saat ini berada di Dashboard Publik.');
-    setSessionNotice('');
+    setShowLoginScreen(true);
+    setToastMessage('');
+    setSessionNotice('Anda telah keluar dari sesi SIMAS-BMD dengan aman.');
     await apiLogout(activeSession);
   };
 
@@ -300,12 +322,12 @@ export default function App() {
     }
   };
 
-  // Show dedicated Login screen only when user explicitly clicks Masuk / Login or session expired
+  // Show dedicated Login screen unless user chooses Public Observer mode
   if (!session && showLoginScreen) {
     return (
       <LoginView
         onLoginSuccess={handleLoginSuccess}
-        onBackToDashboard={() => {
+        onEnterPublicMode={() => {
           setShowLoginScreen(false);
           setActiveModule('dashboard');
         }}
@@ -340,8 +362,52 @@ export default function App() {
     setAssets(INITIAL_ASSETS);
     setMutations(INITIAL_MUTATIONS);
     setDamageReports(INITIAL_DAMAGE_REPORTS);
+    setVehicles(INITIAL_VEHICLES);
+    setVehicleMaintenances(INITIAL_VEHICLE_MAINTENANCE);
     localStorage.removeItem(STORAGE_KEY);
-    showToast('Data simulasi KIB SIMAS-BMD telah dikembalikan ke kondisi awal.');
+    showToast('Data simulasi KIB & Kendaraan SIMAS-BMD telah dikembalikan ke kondisi awal.');
+  };
+
+  const handleAddVehicle = (newVehicle: Omit<VehicleItem, 'id'>) => {
+    if (!activeRoleProfile.permissions.canCreateAsset) return;
+    const nextNum = vehicles.length + 1;
+    const id = `KND-${String(nextNum).padStart(3, '0')}`;
+    setVehicles((prev) => [{ ...newVehicle, id }, ...prev]);
+    showToast(
+      `Kendaraan ${newVehicle.nomorPolisi} (${newVehicle.namaKendaraan}) berhasil ditambahkan.`
+    );
+  };
+
+  const handleUpdateVehicle = (updated: VehicleItem) => {
+    if (!activeRoleProfile.permissions.canEditAsset) return;
+    setVehicles((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+    showToast(`Data kendaraan ${updated.nomorPolisi} (${updated.id}) berhasil diperbarui.`);
+  };
+
+  const handleDeleteVehicle = (vehicleId: string) => {
+    if (!activeRoleProfile.permissions.canDeleteAsset) return;
+    setVehicles((prev) => prev.filter((v) => v.id !== vehicleId));
+    setVehicleMaintenances((prev) => prev.filter((m) => m.vehicleId !== vehicleId));
+    showToast(`Data kendaraan ${vehicleId} dihapus dari daftar aktif.`);
+  };
+
+  const handleAddVehicleMaintenance = (
+    record: Omit<VehicleMaintenanceRecord, 'id' | 'dicatatOleh'>
+  ) => {
+    const canRecord =
+      activeRoleProfile.permissions.canReportDamage ||
+      activeRoleProfile.permissions.canResolveDamage ||
+      activeRoleProfile.permissions.canEditAsset ||
+      activeRoleProfile.permissions.canCreateAsset;
+    if (!canRecord) return;
+    const seq = vehicleMaintenances.length + 1;
+    const newRecord: VehicleMaintenanceRecord = {
+      ...record,
+      id: `MNT-2026-${String(seq).padStart(3, '0')}`,
+      dicatatOleh: activeRoleProfile.officerName,
+    };
+    setVehicleMaintenances((prev) => [newRecord, ...prev]);
+    showToast(`Riwayat pemeliharaan/perbaikan ${newRecord.id} berhasil dicatat.`);
   };
 
   const handleAddAsset = (newAsset: Omit<AssetItem, 'id' | 'qrPayload'>) => {
@@ -751,6 +817,19 @@ export default function App() {
             />
           )}
 
+          {session && safeActiveModule === 'kendaraan' && (
+            <VehicleInventoryView
+              vehicles={vehicles}
+              maintenances={vehicleMaintenances}
+              locations={locations}
+              roleProfile={activeRoleProfile}
+              onAddVehicle={handleAddVehicle}
+              onUpdateVehicle={handleUpdateVehicle}
+              onDeleteVehicle={handleDeleteVehicle}
+              onAddMaintenance={handleAddVehicleMaintenance}
+            />
+          )}
+
           {session && safeActiveModule === 'qr_scanner' && (
             <QrScannerView
               assets={assets}
@@ -849,10 +928,10 @@ export default function App() {
 
         <footer className="border-t border-slate-200 bg-white px-4 sm:px-8 py-3.5 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 no-print">
           <span>
-            SIMAS-BMD · Badan Penanggulangan Bencana Daerah (BPBD) Kabupaten Sidoarjo
+            © 2026 Badan Penanggulangan Bencana Daerah Kabupaten Sidoarjo
           </span>
           <span className="tabular-nums">
-            Standar Kode Barang Permendagri 108/2016 · Tahun Anggaran 2026
+            SIMAS-BMD · Standar Kode Barang Permendagri 108/2016
           </span>
         </footer>
       </div>

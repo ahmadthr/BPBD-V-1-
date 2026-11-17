@@ -29,6 +29,7 @@ export type OpnameStatus =
 export type ModuleKey =
   | 'dashboard'
   | 'kib'
+  | 'kendaraan'
   | 'qr_scanner'
   | 'mutasi'
   | 'opname_laporan'
@@ -186,4 +187,65 @@ export interface OpnameCheckRecord {
   status: OpnameStatus;
   observedCondition: ConditionStatus;
   notes: string;
+}
+
+export type VehicleCategory = 'RODA_4' | 'RODA_2';
+
+export type TaxStatus = 'LUNAS_AKTIF' | 'BELUM_BAYAR';
+
+export type BpkbStatus = 'SUDAH_KELUAR' | 'BELUM_KELUAR_PROSES';
+
+export type AcquisitionSource =
+  | 'APBD Kabupaten'
+  | 'Hibah'
+  | 'Bantuan Pusat'
+  | 'Bantuan Provinsi'
+  | 'Lainnya';
+
+export type MaintenanceType =
+  | 'PEMELIHARAAN_RUTIN'
+  | 'PERBAIKAN_RINGAN'
+  | 'PERBAIKAN_BERAT';
+
+export interface VehicleItem {
+  id: string;
+  kodeBarang: string;
+  nomorRegister: string;
+  kategori: VehicleCategory;
+  namaKendaraan: string;
+  merkTipe: string;
+  tahunPerolehan: number;
+  warna: string;
+  nomorPolisi: string;
+  nomorRangka: string;
+  nomorMesin: string;
+  statusPajak: TaxStatus;
+  pajakBerlakuSampai: string;
+  statusBpkb: BpkbStatus;
+  nomorBpkb?: string;
+  locationId: string;
+  penanggungJawab: string;
+  jabatanPemegang: string;
+  kondisi: ConditionStatus;
+  sumberPerolehan: AcquisitionSource;
+  nilaiPerolehan: number;
+  hibahInstansiPemberi?: string;
+  hibahNomorBast?: string;
+  hibahTanggal?: string;
+  keterangan?: string;
+}
+
+export interface VehicleMaintenanceRecord {
+  id: string;
+  vehicleId: string;
+  tanggalPerbaikan: string;
+  jenisPenanganan: MaintenanceType;
+  deskripsiKerusakan: string;
+  tindakanPerbaikan: string;
+  bengkelPelaksana: string;
+  biaya: number;
+  buktiNamaFile?: string;
+  buktiMimeType?: string;
+  buktiDataUrl?: string;
+  dicatatOleh: string;
 }

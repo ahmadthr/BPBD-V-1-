@@ -93,13 +93,21 @@ export const PrintableQrSticker: React.FC<PrintableQrStickerProps> = ({
     <div className="space-y-4">
       <div className="border-2 border-slate-900 bg-white p-4">
         <div className="flex items-center justify-between border-b border-slate-900 pb-2 mb-3">
-          <div>
-            <p className="text-[11px] font-bold tracking-wider uppercase text-slate-900">
-              Pemerintah Kabupaten Sidoarjo
-            </p>
-            <p className="text-xs font-semibold text-[#0B2545]">
-              BPBD · Barang Milik Daerah (KIB {asset.kibType})
-            </p>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png"
+              alt="Logo BPBD Sidoarjo"
+              referrerPolicy="no-referrer"
+              className="w-8 h-8 object-contain shrink-0"
+            />
+            <div>
+              <p className="text-[11px] font-bold tracking-wider uppercase text-slate-900">
+                Pemerintah Kabupaten Sidoarjo
+              </p>
+              <p className="text-xs font-semibold text-[#0B2545]">
+                BPBD · Barang Milik Daerah (KIB {asset.kibType})
+              </p>
+            </div>
           </div>
           <span className="font-mono text-xs font-semibold text-slate-700 tabular-nums">
             {asset.id}

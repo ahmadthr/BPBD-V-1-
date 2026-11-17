@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Shield,
   ShieldAlert,
+  Truck,
   X,
 } from 'lucide-react';
 import { AuthSessionUser, ModuleKey, RoleProfile } from '../types/simas';
@@ -37,6 +38,7 @@ const NAV_ITEMS: {
 }[] = [
   { key: 'dashboard', label: 'Dashboard Eksekutif', icon: LayoutDashboard },
   { key: 'kib', label: 'Manajemen KIB A–F', icon: Database },
+  { key: 'kendaraan', label: 'Inventaris Kendaraan', icon: Truck },
   { key: 'qr_scanner', label: 'QR Code & Scanner', icon: QrCode },
   { key: 'mutasi', label: 'Mutasi & Lokasi Aset', icon: ArrowLeftRight },
   { key: 'opname_laporan', label: 'Opname & Pelaporan', icon: ClipboardCheck },
@@ -67,13 +69,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     roleProfile ? roleProfile.allowedModules : ['dashboard']
   );
 
+  const [logoFailed, setLogoFailed] = React.useState(false);
+
   const sidebarContent = (
     <div className="flex h-full flex-col bg-[#0B2545] text-slate-100 select-none">
       {/* Brand Header */}
       <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#163D6B] border border-white/15">
-            <Shield className="h-5 w-5 text-amber-400" aria-hidden="true" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white p-1 border border-white/20">
+            {!logoFailed ? (
+              <img
+                src="/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png"
+                alt="Logo BPBD Sidoarjo"
+                referrerPolicy="no-referrer"
+                onError={() => setLogoFailed(true)}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <Shield className="h-5 w-5 text-[#0B2545]" aria-hidden="true" />
+            )}
           </div>
           <div className="min-w-0">
             <p className="font-display text-base font-bold tracking-tight text-white truncate">
