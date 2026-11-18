@@ -3,11 +3,13 @@ import {
   Download,
   Edit3,
   Eye,
+  FileSpreadsheet,
   Plus,
   Printer,
   QrCode,
   Search,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -18,12 +20,26 @@ import {
   RoleProfile,
 } from '../types/simas';
 import {
+  KIB_FIELD_ALIASES,
+  KIB_FIELD_DEFINITIONS,
+  downloadKibExcelTemplate,
+  exportWorkbookXlsx,
+  mapRowsToKibAssets,
+} from '../utils/excelImportHelper';
+import {
   KIB_META,
   OPNAME_STATUS_META,
   exportAssetsToCSV,
   formatDateID,
   formatIDR,
 } from '../utils/formatters';
+import { ExcelImportModal } from './ExcelImportModal';
+import {
+  ItemPhotoControl,
+  ItemPhotoThumbnail,
+  PhotoLightboxData,
+  PhotoLightboxModal,
+} from './ItemPhotoControl';
 import { PrintableQrSticker } from './QrCodeCanvas';
 import { ConditionIndicator } from './StatusText';
 
@@ -34,6 +50,7 @@ interface KibManagementViewProps {
   initialKibFilter?: KibCategory | 'ALL';
   initialLocationFilter?: string;
   onAddAsset: (asset: Omit<AssetItem, 'id' | 'qrPayload'>) => void;
+  onImportAssets?: (assets: Omit<AssetItem, 'id' | 'qrPayload'>[]) => void;
   onUpdateAsset: (asset: AssetItem) => void;
   onDeleteAsset: (assetId: string) => void;
   onQuickNavigateToMutation: (assetId: string) => void;
@@ -70,6 +87,8 @@ const EMPTY_FORM: Omit<AssetItem, 'id' | 'qrPayload'> = {
   lastOpnameDate: new Date().toISOString().slice(0, 10),
   lastOpnameStatus: 'SESUAI',
   keterangan: '',
+  fotoDataUrl: undefined,
+  fotoNamaFile: undefined,
 };
 
 export const KibManagementView: React.FC<KibManagementViewProps> = ({
@@ -79,6 +98,7 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
   initialKibFilter = 'ALL',
   initialLocationFilter = 'ALL',
   onAddAsset,
+  onImportAssets,
   onUpdateAsset,
   onDeleteAsset,
   onQuickNavigateToMutation,
@@ -99,6 +119,11 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
   const [formOpen, setFormOpen] = useState<boolean>(false);
   const [editingAsset, setEditingAsset] = useState<AssetItem | null>(null);
   const [formData, setFormData] = useState<Omit<AssetItem, 'id' | 'qrPayload'>>(EMPTY_FORM);
+  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState<boolean>(false);
+  const [importDefaultLoc, setImportDefaultLoc] = useState<string>(
+    roleProfile.assignedLocationId || 'LOC-MAKO'
+  );
 
   const locationMap = useMemo(
     () => new Map(locations.map((l) => [l.id, l])),
@@ -183,6 +208,57 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
               <button
                 type="button"
                 onClick={() =>
+                  exportWorkbookXlsx(
+                    `KIB_${kibFilter}`,
+                    [
+                      'ID Aset',
+                      'Golongan KIB',
+                      'Kode Barang',
+                      'Nomor Register',
+                      'Nama Barang',
+                      'Merk / Tipe',
+                      'Spesifikasi',
+                      'Tahun Perolehan',
+                      'Asal Perolehan',
+                      'Jumlah',
+                      'Satuan',
+                      'Nilai Perolehan',
+                      'Kondisi',
+                      'Lokasi Penempatan',
+                      'Penanggung Jawab',
+                      'No. Polisi / Sertifikat',
+                      'Keterangan',
+                    ],
+                    filteredAssets.map((a) => [
+                      a.id,
+                      a.kibType,
+                      a.kodeBarang,
+                      a.nomorRegister,
+                      a.namaBarang,
+                      a.merkTipe,
+                      a.spesifikasi,
+                      a.tahunPerolehan,
+                      a.asalPerolehan,
+                      a.jumlahUnit,
+                      a.satuan,
+                      a.nilaiPerolehan,
+                      a.kondisi,
+                      locationMap.get(a.locationId)?.name ?? a.locationId,
+                      a.penanggungJawab,
+                      a.nomorPolisiOrSertifikat,
+                      a.keterangan,
+                    ]),
+                    `kib-${kibFilter.toLowerCase()}-bpbd-sidoarjo.xlsx`
+                  )
+                }
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                Ekspor Excel
+              </button>
+              <button
+                type="button"
+                onClick={() =>
                   exportAssetsToCSV(
                     filteredAssets,
                     locations,
@@ -205,14 +281,24 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
             </>
           )}
           {roleProfile.permissions.canCreateAsset && (
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Input Perolehan Aset
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setImportModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import Excel
+              </button>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Input Perolehan Aset
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -329,6 +415,7 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                  <th className="py-3 px-3 text-center w-14">Foto</th>
                   <th className="py-3 px-4">KIB & Kode Barang</th>
                   <th className="py-3 px-4">Nama Barang / Merk & Tipe</th>
                   <th className="py-3 px-4 text-center">Tahun</th>
@@ -347,6 +434,24 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
                       key={asset.id}
                       className="hover:bg-slate-50/80 transition-colors"
                     >
+                      <td className="py-3 px-3 align-top">
+                        <div className="flex justify-center">
+                          <ItemPhotoThumbnail
+                            fotoDataUrl={asset.fotoDataUrl}
+                            alt={asset.namaBarang}
+                            onClick={() =>
+                              asset.fotoDataUrl &&
+                              setLightboxPhoto({
+                                title: asset.namaBarang,
+                                subtitle: `${asset.id} · ${asset.kodeBarang}`,
+                                dataUrl: asset.fotoDataUrl,
+                                fileName: asset.fotoNamaFile,
+                              })
+                            }
+                          />
+                        </div>
+                      </td>
+
                       <td className="py-3 px-4 align-top whitespace-nowrap">
                         <div className="font-mono font-semibold text-[#0B2545] tabular-nums">
                           KIB {asset.kibType} · {asset.id}
@@ -469,6 +574,49 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
             </div>
 
             <div className="p-6 space-y-5 text-xs">
+              {selectedAsset.fotoDataUrl && (
+                <div className="p-3 rounded-md bg-slate-50 border border-slate-200 flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLightboxPhoto({
+                        title: selectedAsset.namaBarang,
+                        subtitle: `${selectedAsset.id} · ${selectedAsset.kodeBarang}`,
+                        dataUrl: selectedAsset.fotoDataUrl!,
+                        fileName: selectedAsset.fotoNamaFile,
+                      })
+                    }
+                    className="w-28 h-24 rounded border border-slate-300 bg-white overflow-hidden shrink-0 cursor-pointer hover:border-[#0B2545]"
+                  >
+                    <img
+                      src={selectedAsset.fotoDataUrl}
+                      alt={selectedAsset.namaBarang}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                  <div className="space-y-1 min-w-0">
+                    <p className="font-semibold text-slate-800">Foto Dokumentasi Fisik Barang</p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {selectedAsset.fotoNamaFile || 'foto-aset-bmd.jpg'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLightboxPhoto({
+                          title: selectedAsset.namaBarang,
+                          subtitle: `${selectedAsset.id} · ${selectedAsset.kodeBarang}`,
+                          dataUrl: selectedAsset.fotoDataUrl!,
+                          fileName: selectedAsset.fotoNamaFile,
+                        })
+                      }
+                      className="text-[11px] font-semibold text-[#0B2545] hover:underline cursor-pointer"
+                    >
+                      Perbesar Foto
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 border-b sm:border-b-0 pb-3 sm:pb-0 border-slate-100">
                   <div>
@@ -855,6 +1003,15 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
                 />
               </div>
 
+              <ItemPhotoControl
+                fotoDataUrl={formData.fotoDataUrl}
+                fotoNamaFile={formData.fotoNamaFile}
+                label="Foto Fisik Barang / Aset KIB (Opsional)"
+                onChange={({ fotoDataUrl, fotoNamaFile }) =>
+                  setFormData({ ...formData, fotoDataUrl, fotoNamaFile })
+                }
+              />
+
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
@@ -874,6 +1031,61 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Excel Import Modal for External BMD Apps */}
+      <ExcelImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        title="Import Excel Master KIB (Support SIMBADA / e-BMD / SIPD / CSV)"
+        subtitle="Unggah file .xlsx, .xls, atau .csv dari aplikasi pengelola aset lain dan petakan kolom ke Master KIB SIMAS-BMD"
+        fieldDefinitions={KIB_FIELD_DEFINITIONS}
+        fieldAliases={KIB_FIELD_ALIASES}
+        onDownloadTemplate={downloadKibExcelTemplate}
+        extraOptions={
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-800">
+                Lokasi Default Jika Kolom Lokasi Tidak Ada di Excel
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Baris yang sudah mencantumkan nama Pos / Mako di Excel akan otomatis dicocokkan ke lokasi masing-masing.
+              </p>
+            </div>
+            <select
+              value={importDefaultLoc}
+              onChange={(e) => setImportDefaultLoc(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium"
+            >
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.code} · {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+        onConfirmImport={(rows, mapping) => {
+          const parsed = mapRowsToKibAssets(
+            rows,
+            mapping,
+            locations,
+            importDefaultLoc,
+            roleProfile.officerName
+          );
+          if (parsed.length > 0) {
+            onImportAssets?.(parsed);
+          }
+          return {
+            importedCount: parsed.length,
+            message: `${parsed.length} register barang berhasil diimpor ke Master KIB A–F.`,
+          };
+        }}
+      />
+
+      <PhotoLightboxModal
+        photo={lightboxPhoto}
+        onClose={() => setLightboxPhoto(null)}
+      />
     </div>
   );
 };

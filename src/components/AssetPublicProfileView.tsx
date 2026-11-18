@@ -47,6 +47,11 @@ import {
   buildRoomDetailUrl,
   copyTextToClipboard,
 } from '../utils/printHelper';
+import {
+  ItemPhotoThumbnail,
+  PhotoLightboxData,
+  PhotoLightboxModal,
+} from './ItemPhotoControl';
 import { QrCodeImage } from './QrCodeCanvas';
 import { ConditionIndicator } from './StatusText';
 
@@ -113,6 +118,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
     dataUrl: string;
     caption: string;
   } | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
 
   const locationMap = useMemo(
     () => new Map(locations.map((l) => [l.id, l])),
@@ -214,6 +220,10 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
   const displayLocation = locationMap.get(displayLocationId);
   const displayOfficer =
     matchedVehicle?.penanggungJawab ?? matchedAsset?.penanggungJawab ?? '-';
+  const displayPhotoUrl =
+    matchedVehicle?.fotoDataUrl ?? matchedAsset?.fotoDataUrl ?? undefined;
+  const displayPhotoName =
+    matchedVehicle?.fotoNamaFile ?? matchedAsset?.fotoNamaFile ?? undefined;
 
   const qrPayloadString = `SIMAS-BMD|BPBD-SDA|${displayKode}|${displayRegister}`;
   const { fullUrl: fullAssetQrUrl, pathUrl: dynamicAssetRouteUrl } =
@@ -503,6 +513,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                       <th className="py-3 px-4 w-10 text-center">No</th>
+                      <th className="py-3 px-3 text-center w-14">Foto</th>
                       <th className="py-3 px-4">Nama Barang / Jenis</th>
                       <th className="py-3 px-4">Merk / Model</th>
                       <th className="py-3 px-4 text-center">Tahun</th>
@@ -515,7 +526,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {matchedRoomEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-slate-500">
+                        <td colSpan={9} className="py-8 text-center text-slate-500">
                           Belum ada barang inventaris tercatat pada ruangan ini.
                         </td>
                       </tr>
@@ -524,6 +535,23 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
                         <tr key={item.id} className="hover:bg-slate-50/70">
                           <td className="py-3 px-4 text-center font-mono tabular-nums text-slate-500">
                             {idx + 1}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="flex justify-center">
+                              <ItemPhotoThumbnail
+                                fotoDataUrl={item.fotoDataUrl}
+                                alt={item.namaBarang}
+                                onClick={() =>
+                                  item.fotoDataUrl &&
+                                  setLightboxPhoto({
+                                    title: item.namaBarang,
+                                    subtitle: `${matchedRoom.namaRuang} · ${item.kodeBarang}`,
+                                    dataUrl: item.fotoDataUrl,
+                                    fileName: item.fotoNamaFile,
+                                  })
+                                }
+                              />
+                            </div>
                           </td>
                           <td className="py-3 px-4 font-semibold text-slate-900">
                             {item.namaBarang}
@@ -603,20 +631,47 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
                   </div>
                 </div>
 
-                {/* Embedded QR Verification Block */}
-                <div className="shrink-0 flex flex-row md:flex-col items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-md">
-                  <QrCodeImage value={fullAssetQrUrl} size={96} />
-                  <div className="text-left md:text-center space-y-0.5">
-                    <p className="text-[11px] font-semibold text-[#0B2545] flex items-center md:justify-center gap-1">
-                      <QrCode className="w-3.5 h-3.5" aria-hidden="true" />
-                      Tautan QR Terverifikasi
-                    </p>
-                    <p className="font-mono text-[10px] text-slate-500 break-all max-w-[170px]">
-                      {fullAssetQrUrl}
-                    </p>
-                    <p className="font-mono text-[9px] text-slate-400 break-all max-w-[170px]">
-                      {qrPayloadString}
-                    </p>
+                {/* Embedded Photo + QR Verification Block */}
+                <div className="shrink-0 flex flex-wrap items-stretch gap-3">
+                  {displayPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLightboxPhoto({
+                          title: displayName,
+                          subtitle: `${displayAssetNo} · ${displayKode}`,
+                          dataUrl: displayPhotoUrl,
+                          fileName: displayPhotoName,
+                        })
+                      }
+                      className="flex flex-col items-center justify-center p-2 bg-slate-50 border border-slate-200 hover:border-[#0B2545] rounded-md cursor-pointer"
+                      title="Klik untuk memperbesar foto barang"
+                    >
+                      <img
+                        src={displayPhotoUrl}
+                        alt={displayName}
+                        className="w-28 h-24 object-cover rounded border border-slate-200 bg-white"
+                      />
+                      <span className="text-[10px] font-semibold text-[#0B2545] mt-1.5">
+                        Foto Fisik Barang
+                      </span>
+                    </button>
+                  )}
+
+                  <div className="flex flex-row md:flex-col items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-md">
+                    <QrCodeImage value={fullAssetQrUrl} size={96} />
+                    <div className="text-left md:text-center space-y-0.5">
+                      <p className="text-[11px] font-semibold text-[#0B2545] flex items-center md:justify-center gap-1">
+                        <QrCode className="w-3.5 h-3.5" aria-hidden="true" />
+                        Tautan QR Terverifikasi
+                      </p>
+                      <p className="font-mono text-[10px] text-slate-500 break-all max-w-[170px]">
+                        {fullAssetQrUrl}
+                      </p>
+                      <p className="font-mono text-[9px] text-slate-400 break-all max-w-[170px]">
+                        {qrPayloadString}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1061,6 +1116,10 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
           </div>
         </div>
       )}
+      <PhotoLightboxModal
+        photo={lightboxPhoto}
+        onClose={() => setLightboxPhoto(null)}
+      />
     </div>
   );
 };

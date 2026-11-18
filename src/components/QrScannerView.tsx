@@ -41,6 +41,10 @@ import {
   generateStickerHtmlBlock,
   printHtmlInHiddenFrame,
 } from '../utils/printHelper';
+import {
+  PhotoLightboxData,
+  PhotoLightboxModal,
+} from './ItemPhotoControl';
 import { PrintableQrSticker, QrCodeImage } from './QrCodeCanvas';
 import { ConditionIndicator } from './StatusText';
 
@@ -98,6 +102,7 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
   const [generatorLocationFilter, setGeneratorLocationFilter] = useState<string>(
     roleProfile.assignedLocationId || 'ALL'
   );
+  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -761,6 +766,26 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                   </div>
                   <ConditionIndicator condition={scannedVehicle.kondisi} />
                 </div>
+                {scannedVehicle.fotoDataUrl && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLightboxPhoto({
+                        title: `${scannedVehicle.namaKendaraan} · ${scannedVehicle.nomorPolisi}`,
+                        subtitle: scannedVehicle.merkTipe,
+                        dataUrl: scannedVehicle.fotoDataUrl!,
+                        fileName: scannedVehicle.fotoNamaFile,
+                      })
+                    }
+                    className="w-full sm:w-56 h-36 rounded-md border border-slate-300 bg-slate-50 overflow-hidden cursor-pointer hover:border-[#0B2545]"
+                  >
+                    <img
+                      src={scannedVehicle.fotoDataUrl}
+                      alt={scannedVehicle.namaKendaraan}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                )}
                 <p className="text-slate-600">
                   Klik tombol di bawah untuk membuka halaman profil kendaraan lengkap beserta status pajak, BPKB, hibah, dan riwayat servis.
                 </p>
@@ -835,6 +860,37 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                   {opnameFeedback && (
                     <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium">
                       {opnameFeedback}
+                    </div>
+                  )}
+
+                  {(scannedAsset.fotoDataUrl || scannedVehicle?.fotoDataUrl) && (
+                    <div className="p-3 rounded-md bg-slate-50 border border-slate-200 flex items-center gap-3.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLightboxPhoto({
+                            title: scannedAsset.namaBarang,
+                            subtitle: `${scannedAsset.id} · ${scannedAsset.kodeBarang}`,
+                            dataUrl:
+                              scannedAsset.fotoDataUrl || scannedVehicle?.fotoDataUrl || '',
+                            fileName:
+                              scannedAsset.fotoNamaFile || scannedVehicle?.fotoNamaFile,
+                          })
+                        }
+                        className="w-24 h-20 rounded border border-slate-300 bg-white overflow-hidden shrink-0 cursor-pointer hover:border-[#0B2545]"
+                      >
+                        <img
+                          src={scannedAsset.fotoDataUrl || scannedVehicle?.fotoDataUrl}
+                          alt={scannedAsset.namaBarang}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                      <div className="min-w-0 space-y-1">
+                        <p className="font-semibold text-slate-800">Foto Fisik Aset Terlampir</p>
+                        <p className="text-[11px] text-slate-500">
+                          Klik thumbnail untuk memperbesar foto barang saat inspeksi lapangan.
+                        </p>
+                      </div>
                     </div>
                   )}
 
@@ -1050,6 +1106,10 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
           </div>
         </div>
       )}
+      <PhotoLightboxModal
+        photo={lightboxPhoto}
+        onClose={() => setLightboxPhoto(null)}
+      />
     </div>
   );
 };

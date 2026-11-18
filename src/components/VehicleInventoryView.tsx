@@ -9,6 +9,7 @@ import {
   Edit3,
   Eye,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   Paperclip,
   Plus,
@@ -32,7 +33,21 @@ import {
   VehicleItem,
   VehicleMaintenanceRecord,
 } from '../types/simas';
+import {
+  VEHICLE_FIELD_ALIASES,
+  VEHICLE_FIELD_DEFINITIONS,
+  downloadVehicleExcelTemplate,
+  exportWorkbookXlsx,
+  mapRowsToVehicles,
+} from '../utils/excelImportHelper';
 import { formatDateID, formatIDR, getTaxExpiryInfo } from '../utils/formatters';
+import { ExcelImportModal } from './ExcelImportModal';
+import {
+  ItemPhotoControl,
+  ItemPhotoThumbnail,
+  PhotoLightboxData,
+  PhotoLightboxModal,
+} from './ItemPhotoControl';
 import { ConditionIndicator } from './StatusText';
 
 interface VehicleInventoryViewProps {
@@ -41,6 +56,7 @@ interface VehicleInventoryViewProps {
   locations: LocationUnit[];
   roleProfile: RoleProfile;
   onAddVehicle: (vehicle: Omit<VehicleItem, 'id'>) => void;
+  onImportVehicles?: (vehicles: Omit<VehicleItem, 'id'>[]) => void;
   onUpdateVehicle: (vehicle: VehicleItem) => void;
   onDeleteVehicle: (vehicleId: string) => void;
   onAddMaintenance: (
@@ -110,6 +126,8 @@ const EMPTY_VEHICLE_FORM: Omit<VehicleItem, 'id'> = {
   hibahNomorBast: '',
   hibahTanggal: '',
   keterangan: '',
+  fotoDataUrl: undefined,
+  fotoNamaFile: undefined,
 };
 
 const EMPTY_MAINTENANCE_FORM = {
@@ -218,6 +236,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   locations,
   roleProfile,
   onAddVehicle,
+  onImportVehicles,
   onUpdateVehicle,
   onDeleteVehicle,
   onAddMaintenance,
@@ -239,6 +258,11 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   const [maintenanceFormOpen, setMaintenanceFormOpen] = useState<boolean>(false);
   const [maintenanceForm, setMaintenanceForm] = useState(EMPTY_MAINTENANCE_FORM);
   const [uploadError, setUploadError] = useState<string>('');
+  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState<boolean>(false);
+  const [importDefaultLoc, setImportDefaultLoc] = useState<string>(
+    roleProfile.assignedLocationId || 'LOC-MAKO'
+  );
 
   const [proofPreview, setProofPreview] = useState<{
     fileName: string;
@@ -446,6 +470,67 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
             <>
               <button
                 type="button"
+                onClick={() =>
+                  exportWorkbookXlsx(
+                    'Kendaraan_BPBD',
+                    [
+                      'ID',
+                      'Kategori',
+                      'Kode Barang',
+                      'Nomor Register',
+                      'Nama Kendaraan',
+                      'Merk / Tipe',
+                      'Tahun Perolehan',
+                      'Warna',
+                      'Nomor Polisi',
+                      'Nomor Rangka',
+                      'Nomor Mesin',
+                      'Status Pajak',
+                      'Masa Pajak Berakhir',
+                      'Keterangan BPKB',
+                      'Nomor BPKB',
+                      'Pos Penempatan',
+                      'Penanggung Jawab',
+                      'Sumber Perolehan',
+                      'Nilai Perolehan',
+                      'Kondisi',
+                      'Keterangan',
+                    ],
+                    filteredVehicles.map((v) => [
+                      v.id,
+                      v.kategori === 'RODA_4' ? 'Roda 4' : 'Roda 2',
+                      v.kodeBarang,
+                      v.nomorRegister,
+                      v.namaKendaraan,
+                      v.merkTipe,
+                      v.tahunPerolehan,
+                      v.warna,
+                      v.nomorPolisi,
+                      v.nomorRangka,
+                      v.nomorMesin,
+                      v.statusPajak === 'LUNAS_AKTIF' ? 'Lunas/Aktif' : 'Belum Bayar',
+                      v.pajakBerlakuSampai,
+                      v.statusBpkb === 'SUDAH_KELUAR'
+                        ? 'BPKB Sudah Keluar'
+                        : 'BPKB Belum Keluar / Masih Proses',
+                      v.nomorBpkb ?? '',
+                      locationMap.get(v.locationId)?.name ?? v.locationId,
+                      v.penanggungJawab,
+                      v.sumberPerolehan,
+                      v.nilaiPerolehan,
+                      v.kondisi,
+                      v.keterangan ?? '',
+                    ]),
+                    'inventaris-kendaraan-bpbd-sidoarjo.xlsx'
+                  )
+                }
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                Ekspor Excel
+              </button>
+              <button
+                type="button"
                 onClick={() => exportVehiclesToCSV(filteredVehicles, locations, maintenances)}
                 className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
@@ -463,14 +548,24 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
             </>
           )}
           {roleProfile.permissions.canCreateAsset && (
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Tambah Kendaraan
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setImportModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import Excel
+              </button>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Tambah Kendaraan
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -645,6 +740,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                <th className="py-3 px-3 text-center w-14">Foto</th>
                 <th className="py-3 px-4">Kategori &amp; No. Polisi</th>
                 <th className="py-3 px-4">Kendaraan &amp; Identifikasi Fisik</th>
                 <th className="py-3 px-4">Status Pajak &amp; BPKB</th>
@@ -657,7 +753,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredVehicles.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-500">
+                  <td colSpan={8} className="py-10 text-center text-slate-500">
                     Tidak ada unit kendaraan yang sesuai dengan filter pencarian.
                   </td>
                 </tr>
@@ -670,6 +766,24 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
 
                   return (
                     <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-3 align-top">
+                        <div className="flex justify-center">
+                          <ItemPhotoThumbnail
+                            fotoDataUrl={v.fotoDataUrl}
+                            alt={`${v.namaKendaraan} (${v.nomorPolisi})`}
+                            onClick={() =>
+                              v.fotoDataUrl &&
+                              setLightboxPhoto({
+                                title: `${v.namaKendaraan} · ${v.nomorPolisi}`,
+                                subtitle: `${v.id} · ${v.merkTipe}`,
+                                dataUrl: v.fotoDataUrl,
+                                fileName: v.fotoNamaFile,
+                              })
+                            }
+                          />
+                        </div>
+                      </td>
+
                       <td className="py-3.5 px-4 whitespace-nowrap align-top">
                         <div className="flex items-center gap-1.5 font-semibold text-[#0B2545]">
                           {v.kategori === 'RODA_4' ? (
@@ -1348,6 +1462,21 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                 </div>
               </div>
 
+              {/* Section E: Foto Fisik Kendaraan */}
+              <div className="space-y-2">
+                <h4 className="font-display text-xs font-bold uppercase tracking-wider text-[#0B2545] border-b border-slate-200 pb-1.5">
+                  5. Foto Fisik Kendaraan (Opsional)
+                </h4>
+                <ItemPhotoControl
+                  fotoDataUrl={formData.fotoDataUrl}
+                  fotoNamaFile={formData.fotoNamaFile}
+                  label="Unggah Foto Armada (Tampak Depan / Samping / Plat Nomor)"
+                  onChange={({ fotoDataUrl, fotoNamaFile }) =>
+                    setFormData({ ...formData, fotoDataUrl, fotoNamaFile })
+                  }
+                />
+              </div>
+
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
@@ -1403,6 +1532,51 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
             </div>
 
             <div className="p-6 space-y-6 max-h-[82vh] overflow-y-auto">
+              {detailVehicle.fotoDataUrl && (
+                <div className="p-3.5 rounded-md bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLightboxPhoto({
+                        title: `${detailVehicle.namaKendaraan} · ${detailVehicle.nomorPolisi}`,
+                        subtitle: `${detailVehicle.id} · ${detailVehicle.merkTipe}`,
+                        dataUrl: detailVehicle.fotoDataUrl!,
+                        fileName: detailVehicle.fotoNamaFile,
+                      })
+                    }
+                    className="w-full sm:w-44 h-32 rounded-md border border-slate-300 bg-white overflow-hidden shrink-0 cursor-pointer hover:border-[#0B2545]"
+                  >
+                    <img
+                      src={detailVehicle.fotoDataUrl}
+                      alt={detailVehicle.namaKendaraan}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                  <div className="space-y-1.5 text-xs">
+                    <p className="font-display font-bold text-[#0B2545]">
+                      Dokumentasi Foto Fisik Kendaraan
+                    </p>
+                    <p className="text-slate-600">
+                      Berkas: <span className="font-mono">{detailVehicle.fotoNamaFile || 'foto-kendaraan.jpg'}</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLightboxPhoto({
+                          title: `${detailVehicle.namaKendaraan} · ${detailVehicle.nomorPolisi}`,
+                          subtitle: `${detailVehicle.id} · ${detailVehicle.merkTipe}`,
+                          dataUrl: detailVehicle.fotoDataUrl!,
+                          fileName: detailVehicle.fotoNamaFile,
+                        })
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-[#0B2545] bg-white border border-slate-300 hover:bg-slate-100 rounded cursor-pointer"
+                    >
+                      Perbesar Foto Armada
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Top 3-column summary: Physical IDs | Tax & BPKB | Location & Hibah */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                 <div className="bg-slate-50 border border-slate-200 rounded-md p-4 space-y-2">
@@ -1924,6 +2098,60 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
           </div>
         </div>
       )}
+      {/* Excel Import Modal for Vehicles */}
+      <ExcelImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        title="Import Excel Inventaris Kendaraan (R4/R2)"
+        subtitle="Impor daftar armada dinas dari file Excel/CSV aplikasi BMD lain (SIMBADA, e-BMD, Samsat/Rekap Armada)"
+        fieldDefinitions={VEHICLE_FIELD_DEFINITIONS}
+        fieldAliases={VEHICLE_FIELD_ALIASES}
+        onDownloadTemplate={downloadVehicleExcelTemplate}
+        extraOptions={
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-800">
+                Pos Penempatan Default (Jika Kolom Pos Tidak Terisi)
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Nama Pos Damkar atau Mako di kolom Excel akan dicocokkan otomatis.
+              </p>
+            </div>
+            <select
+              value={importDefaultLoc}
+              onChange={(e) => setImportDefaultLoc(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium"
+            >
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.code} · {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+        onConfirmImport={(rows, mapping) => {
+          const parsed = mapRowsToVehicles(
+            rows,
+            mapping,
+            locations,
+            importDefaultLoc,
+            roleProfile.officerName
+          );
+          if (parsed.length > 0) {
+            onImportVehicles?.(parsed);
+          }
+          return {
+            importedCount: parsed.length,
+            message: `${parsed.length} unit kendaraan berhasil diimpor ke Inventaris Kendaraan.`,
+          };
+        }}
+      />
+
+      <PhotoLightboxModal
+        photo={lightboxPhoto}
+        onClose={() => setLightboxPhoto(null)}
+      />
     </div>
   );
 };

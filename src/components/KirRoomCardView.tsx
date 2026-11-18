@@ -6,12 +6,15 @@ import {
   Check,
   Copy,
   Download,
+  Edit3,
   FileCode2,
+  FileSpreadsheet,
   FileText,
   Plus,
   Printer,
   Shield,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -22,6 +25,13 @@ import {
   RoomUnit,
 } from '../types/simas';
 import {
+  KIR_FIELD_ALIASES,
+  KIR_FIELD_DEFINITIONS,
+  downloadKirExcelTemplate,
+  exportWorkbookXlsx,
+  mapRowsToKirEntries,
+} from '../utils/excelImportHelper';
+import {
   KirSheetRenderData,
   buildRoomDetailUrl,
   copyTextToClipboard,
@@ -30,6 +40,13 @@ import {
   downloadKirPng,
   escapeHtml,
 } from '../utils/printHelper';
+import { ExcelImportModal } from './ExcelImportModal';
+import {
+  ItemPhotoControl,
+  ItemPhotoThumbnail,
+  PhotoLightboxData,
+  PhotoLightboxModal,
+} from './ItemPhotoControl';
 import { QrCodeImage } from './QrCodeCanvas';
 import { ConditionIndicator } from './StatusText';
 
@@ -40,6 +57,8 @@ interface KirRoomCardViewProps {
   roleProfile: RoleProfile;
   onAddRoom: (room: Omit<RoomUnit, 'id'>) => void;
   onAddRoomItem: (item: Omit<RoomAssetEntry, 'id'>) => void;
+  onUpdateRoomItem?: (item: RoomAssetEntry) => void;
+  onImportRoomItems?: (items: Omit<RoomAssetEntry, 'id'>[]) => void;
   onDeleteRoomItem: (itemId: string) => void;
   onOpenRoomPublicView: (roomId: string) => void;
 }
@@ -207,6 +226,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   roleProfile,
   onAddRoom,
   onAddRoomItem,
+  onUpdateRoomItem,
+  onImportRoomItems,
   onDeleteRoomItem,
   onOpenRoomPublicView,
 }) => {
@@ -224,6 +245,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   const [copiedRoomUrl, setCopiedRoomUrl] = useState<boolean>(false);
   const [roomQrDataMap, setRoomQrDataMap] = useState<Record<string, string>>({});
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     let host = document.getElementById('simas-print-portal');
@@ -272,7 +295,20 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   });
 
   const [addItemOpen, setAddItemOpen] = useState(false);
-  const [itemForm, setItemForm] = useState({
+  const [editingRoomItem, setEditingRoomItem] = useState<RoomAssetEntry | null>(null);
+  const [itemForm, setItemForm] = useState<{
+    namaBarang: string;
+    merkModel: string;
+    tahunPerolehan: number;
+    kodeBarang: string;
+    nomorRegister: string;
+    jumlah: number;
+    satuan: string;
+    kondisi: ConditionStatus;
+    keterangan: string;
+    fotoDataUrl?: string;
+    fotoNamaFile?: string;
+  }>({
     namaBarang: '',
     merkModel: '',
     tahunPerolehan: 2026,
@@ -280,8 +316,10 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
     nomorRegister: '0001',
     jumlah: 1,
     satuan: 'Unit',
-    kondisi: 'BAIK' as ConditionStatus,
+    kondisi: 'BAIK',
     keterangan: '',
+    fotoDataUrl: undefined,
+    fotoNamaFile: undefined,
   });
 
   const locationMap = useMemo(
@@ -587,11 +625,19 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   const handleCreateItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRoom || !itemForm.namaBarang.trim()) return;
-    onAddRoomItem({
-      roomId: selectedRoom.id,
-      ...itemForm,
-    });
+    if (editingRoomItem && onUpdateRoomItem) {
+      onUpdateRoomItem({
+        ...editingRoomItem,
+        ...itemForm,
+      });
+    } else {
+      onAddRoomItem({
+        roomId: selectedRoom.id,
+        ...itemForm,
+      });
+    }
     setAddItemOpen(false);
+    setEditingRoomItem(null);
     setItemForm({
       namaBarang: '',
       merkModel: '',
@@ -602,6 +648,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
       satuan: 'Unit',
       kondisi: 'BAIK',
       keterangan: '',
+      fotoDataUrl: undefined,
+      fotoNamaFile: undefined,
     });
   };
 
@@ -677,6 +725,47 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
               >
                 <FileCode2 className="w-3.5 h-3.5" />
                 HTML
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  exportWorkbookXlsx(
+                    `KIR_${selectedRoom.kodeRuang}`,
+                    [
+                      'No',
+                      'Nama Ruangan',
+                      'Kode Ruang',
+                      'Nama / Jenis Barang',
+                      'Merk / Model',
+                      'Tahun',
+                      'Kode Barang',
+                      'No. Register',
+                      'Jumlah',
+                      'Satuan',
+                      'Kondisi',
+                      'Keterangan',
+                    ],
+                    activeItems.map((it, idx) => [
+                      idx + 1,
+                      selectedRoom.namaRuang,
+                      selectedRoom.kodeRuang,
+                      it.namaBarang,
+                      it.merkModel,
+                      it.tahunPerolehan,
+                      it.kodeBarang,
+                      it.nomorRegister,
+                      it.jumlah,
+                      it.satuan,
+                      it.kondisi,
+                      it.keterangan,
+                    ]),
+                    `KIR-${selectedRoom.kodeRuang}-${selectedRoom.id}.xlsx`
+                  )
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 rounded-md cursor-pointer whitespace-nowrap"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                Excel (.xlsx)
               </button>
               <button
                 type="button"
@@ -917,14 +1006,40 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                   )
                 </div>
                 {canModifyKir && (
-                  <button
-                    type="button"
-                    onClick={() => setAddItemOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Tambah Barang ke Ruangan
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImportModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Import Excel ke Ruangan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingRoomItem(null);
+                        setItemForm({
+                          namaBarang: '',
+                          merkModel: '',
+                          tahunPerolehan: 2026,
+                          kodeBarang: '1.3.2.05.01.001',
+                          nomorRegister: '0001',
+                          jumlah: 1,
+                          satuan: 'Unit',
+                          kondisi: 'BAIK',
+                          keterangan: '',
+                          fotoDataUrl: undefined,
+                          fotoNamaFile: undefined,
+                        });
+                        setAddItemOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Tambah Barang ke Ruangan
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -935,6 +1050,9 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                     <tr className="bg-slate-100 text-[11px] font-bold uppercase text-slate-800">
                       <th className="border border-slate-700 py-2 px-2 text-center w-9">
                         No
+                      </th>
+                      <th className="border border-slate-700 py-2 px-2 text-center no-print">
+                        Foto
                       </th>
                       <th className="border border-slate-700 py-2 px-2.5">
                         Nama / Jenis Barang
@@ -962,7 +1080,7 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                       </th>
                       {canModifyKir && (
                         <th className="border border-slate-700 py-2 px-2 text-center no-print">
-                          Hapus
+                          Aksi
                         </th>
                       )}
                     </tr>
@@ -971,7 +1089,7 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                     {activeItems.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={canModifyKir ? 10 : 9}
+                          colSpan={canModifyKir ? 11 : 10}
                           className="border border-slate-700 py-8 text-center text-slate-500"
                         >
                           Belum ada barang terdaftar pada ruangan ini.
@@ -982,6 +1100,23 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                         <tr key={it.id} className="hover:bg-slate-50/70">
                           <td className="border border-slate-700 py-2 px-2 text-center font-mono tabular-nums">
                             {idx + 1}
+                          </td>
+                          <td className="border border-slate-700 py-2 px-2 no-print">
+                            <div className="flex justify-center">
+                              <ItemPhotoThumbnail
+                                fotoDataUrl={it.fotoDataUrl}
+                                alt={it.namaBarang}
+                                onClick={() =>
+                                  it.fotoDataUrl &&
+                                  setLightboxPhoto({
+                                    title: it.namaBarang,
+                                    subtitle: `${selectedRoom.namaRuang} · ${it.kodeBarang}`,
+                                    dataUrl: it.fotoDataUrl,
+                                    fileName: it.fotoNamaFile,
+                                  })
+                                }
+                              />
+                            </div>
                           </td>
                           <td className="border border-slate-700 py-2 px-2.5 font-semibold text-slate-900">
                             {it.namaBarang}
@@ -1009,14 +1144,40 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                           </td>
                           {canModifyKir && (
                             <td className="border border-slate-700 py-2 px-2 text-center no-print">
-                              <button
-                                type="button"
-                                onClick={() => onDeleteRoomItem(it.id)}
-                                title="Hapus barang dari ruangan"
-                                className="p-1 text-slate-400 hover:text-red-700 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingRoomItem(it);
+                                    setItemForm({
+                                      namaBarang: it.namaBarang,
+                                      merkModel: it.merkModel,
+                                      tahunPerolehan: it.tahunPerolehan,
+                                      kodeBarang: it.kodeBarang,
+                                      nomorRegister: it.nomorRegister,
+                                      jumlah: it.jumlah,
+                                      satuan: it.satuan,
+                                      kondisi: it.kondisi,
+                                      keterangan: it.keterangan,
+                                      fotoDataUrl: it.fotoDataUrl,
+                                      fotoNamaFile: it.fotoNamaFile,
+                                    });
+                                    setAddItemOpen(true);
+                                  }}
+                                  title="Edit barang / unggah foto"
+                                  className="p-1 text-slate-500 hover:text-[#0B2545] cursor-pointer"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteRoomItem(it.id)}
+                                  title="Hapus barang dari ruangan"
+                                  className="p-1 text-slate-400 hover:text-red-700 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -1214,23 +1375,28 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
         </div>
       )}
 
-      {/* Modal Tambah Barang ke Ruangan */}
+      {/* Modal Tambah / Edit Barang ke Ruangan */}
       {addItemOpen && selectedRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="bg-white border border-slate-200 rounded-lg max-w-lg w-full shadow-xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-lg max-w-lg w-full shadow-xl overflow-hidden my-6">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-[#0B2545] text-white">
               <h3 className="font-display text-sm font-bold">
-                Tambah Barang ke {selectedRoom.namaRuang}
+                {editingRoomItem
+                  ? `Edit Barang · ${editingRoomItem.namaBarang}`
+                  : `Tambah Barang ke ${selectedRoom.namaRuang}`}
               </h3>
               <button
                 type="button"
-                onClick={() => setAddItemOpen(false)}
+                onClick={() => {
+                  setAddItemOpen(false);
+                  setEditingRoomItem(null);
+                }}
                 className="p-1 rounded text-slate-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateItem} className="p-5 space-y-3 text-xs">
+            <form onSubmit={handleCreateItem} className="p-5 space-y-3 text-xs max-h-[80vh] overflow-y-auto">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Nama / Jenis Barang *
@@ -1373,10 +1539,23 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                   className="w-full px-3 py-2 border border-slate-300 rounded-md"
                 />
               </div>
+
+              <ItemPhotoControl
+                fotoDataUrl={itemForm.fotoDataUrl}
+                fotoNamaFile={itemForm.fotoNamaFile}
+                label="Foto Barang Ruangan (Opsional)"
+                onChange={({ fotoDataUrl, fotoNamaFile }) =>
+                  setItemForm({ ...itemForm, fotoDataUrl, fotoNamaFile })
+                }
+              />
+
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setAddItemOpen(false)}
+                  onClick={() => {
+                    setAddItemOpen(false);
+                    setEditingRoomItem(null);
+                  }}
                   className="px-4 py-2 font-semibold text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer"
                 >
                   Batal
@@ -1385,13 +1564,52 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                   type="submit"
                   className="px-4 py-2 font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer"
                 >
-                  Tambahkan ke KIR
+                  {editingRoomItem ? 'Simpan Perubahan' : 'Tambahkan ke KIR'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Excel Import Modal for Active KIR Room */}
+      {selectedRoom && (
+        <ExcelImportModal
+          isOpen={importModalOpen}
+          onClose={() => setImportModalOpen(false)}
+          title={`Import Excel ke KIR · ${selectedRoom.namaRuang}`}
+          subtitle="Unggah daftar inventaris ruangan (.xlsx, .xls, .csv) dari aplikasi lain dan petakan langsung ke ruangan aktif"
+          fieldDefinitions={KIR_FIELD_DEFINITIONS}
+          fieldAliases={KIR_FIELD_ALIASES}
+          onDownloadTemplate={downloadKirExcelTemplate}
+          extraOptions={
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-slate-700">
+                Target Ruangan Tujuan:{' '}
+                <strong className="text-[#0B2545]">{selectedRoom.namaRuang}</strong>
+              </span>
+              <span className="font-mono text-[11px] text-slate-500">
+                Kode Ruang: {selectedRoom.kodeRuang}
+              </span>
+            </div>
+          }
+          onConfirmImport={(rows, mapping) => {
+            const parsed = mapRowsToKirEntries(rows, mapping, selectedRoom.id);
+            if (parsed.length > 0) {
+              onImportRoomItems?.(parsed);
+            }
+            return {
+              importedCount: parsed.length,
+              message: `${parsed.length} item berhasil diimpor ke KIR "${selectedRoom.namaRuang}".`,
+            };
+          }}
+        />
+      )}
+
+      <PhotoLightboxModal
+        photo={lightboxPhoto}
+        onClose={() => setLightboxPhoto(null)}
+      />
 
       {/* Print Portal (A4 Landscape KIR) */}
       {portalHost &&

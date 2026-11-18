@@ -147,6 +147,8 @@ export interface AssetItem {
   lastOpnameDate: string;
   lastOpnameStatus: OpnameStatus;
   keterangan: string;
+  fotoDataUrl?: string;
+  fotoNamaFile?: string;
 }
 
 export interface AssetMutation {
@@ -240,6 +242,8 @@ export interface VehicleItem {
   hibahNomorBast?: string;
   hibahTanggal?: string;
   keterangan?: string;
+  fotoDataUrl?: string;
+  fotoNamaFile?: string;
 }
 
 export interface VehicleMaintenanceRecord {
@@ -280,5 +284,7 @@ export interface RoomAssetEntry {
   satuan: string;
   kondisi: ConditionStatus;
   keterangan: string;
+  fotoDataUrl?: string;
+  fotoNamaFile?: string;
 }
 

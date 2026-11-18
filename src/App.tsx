@@ -538,6 +538,22 @@ export default function App() {
     );
   };
 
+  const handleImportVehicles = (items: Omit<VehicleItem, 'id'>[]) => {
+    if (!activeRoleProfile.permissions.canCreateAsset || items.length === 0) return;
+    setVehicles((prev) => {
+      const maxNum = prev.reduce((max, item) => {
+        const match = item.id.match(/(\d+)$/);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, prev.length);
+      const created: VehicleItem[] = items.map((item, idx) => ({
+        ...item,
+        id: `KND-${String(maxNum + idx + 1).padStart(3, '0')}`,
+      }));
+      return [...created, ...prev];
+    });
+    showToast(`${items.length} data kendaraan berhasil diimpor dari berkas Excel/CSV.`);
+  };
+
   const handleUpdateVehicle = (updated: VehicleItem) => {
     if (!activeRoleProfile.permissions.canEditAsset) return;
     setVehicles((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
@@ -586,6 +602,30 @@ export default function App() {
     showToast(`Barang "${newItem.namaBarang}" ditambahkan ke Kartu Inventaris Ruangan.`);
   };
 
+  const handleUpdateRoomItem = (updatedItem: RoomAssetEntry) => {
+    if (!activeRoleProfile.permissions.canEditAsset) return;
+    setRoomItems((prev) =>
+      prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+    );
+    showToast(`Item KIR "${updatedItem.namaBarang}" berhasil diperbarui.`);
+  };
+
+  const handleImportRoomItems = (items: Omit<RoomAssetEntry, 'id'>[]) => {
+    if (!activeRoleProfile.permissions.canCreateAsset || items.length === 0) return;
+    setRoomItems((prev) => {
+      const maxNum = prev.reduce((max, item) => {
+        const match = item.id.match(/(\d+)$/);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, prev.length);
+      const created: RoomAssetEntry[] = items.map((item, idx) => ({
+        ...item,
+        id: `KIR-${String(maxNum + idx + 1).padStart(3, '0')}`,
+      }));
+      return [...prev, ...created];
+    });
+    showToast(`${items.length} item barang berhasil diimpor ke Kartu Inventaris Ruangan.`);
+  };
+
   const handleDeleteRoomItem = (itemId: string) => {
     if (!activeRoleProfile.permissions.canDeleteAsset) return;
     setRoomItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -599,6 +639,23 @@ export default function App() {
     const qrPayload = `SIMAS-BMD|BPBD-SDA|${newAsset.kodeBarang}|${newAsset.nomorRegister}`;
     setAssets((prev) => [{ ...newAsset, id, qrPayload }, ...prev]);
     showToast(`Aset baru ${id} (${newAsset.namaBarang}) berhasil dicatat ke Master KIB.`);
+  };
+
+  const handleImportAssets = (items: Omit<AssetItem, 'id' | 'qrPayload'>[]) => {
+    if (!activeRoleProfile.permissions.canCreateAsset || items.length === 0) return;
+    setAssets((prev) => {
+      const maxNum = prev.reduce((max, item) => {
+        const match = item.id.match(/(\d+)$/);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, prev.length);
+      const created: AssetItem[] = items.map((item, idx) => ({
+        ...item,
+        id: `AST-${String(maxNum + idx + 1).padStart(3, '0')}`,
+        qrPayload: `SIMAS-BMD|BPBD-SDA|${item.kodeBarang}|${item.nomorRegister}`,
+      }));
+      return [...created, ...prev];
+    });
+    showToast(`${items.length} register aset berhasil diimpor ke Master KIB A–F.`);
   };
 
   const handleUpdateAsset = (updated: AssetItem) => {
@@ -992,6 +1049,7 @@ export default function App() {
               initialKibFilter={kibInitialCategory}
               initialLocationFilter={kibInitialLocation}
               onAddAsset={handleAddAsset}
+              onImportAssets={handleImportAssets}
               onUpdateAsset={handleUpdateAsset}
               onDeleteAsset={handleDeleteAsset}
               onQuickNavigateToMutation={(assetId) => {
@@ -1013,6 +1071,7 @@ export default function App() {
               locations={locations}
               roleProfile={activeRoleProfile}
               onAddVehicle={handleAddVehicle}
+              onImportVehicles={handleImportVehicles}
               onUpdateVehicle={handleUpdateVehicle}
               onDeleteVehicle={handleDeleteVehicle}
               onAddMaintenance={handleAddVehicleMaintenance}
@@ -1027,6 +1086,8 @@ export default function App() {
               roleProfile={activeRoleProfile}
               onAddRoom={handleAddRoom}
               onAddRoomItem={handleAddRoomItem}
+              onUpdateRoomItem={handleUpdateRoomItem}
+              onImportRoomItems={handleImportRoomItems}
               onDeleteRoomItem={handleDeleteRoomItem}
               onOpenRoomPublicView={openRoomDetailRoute}
             />
