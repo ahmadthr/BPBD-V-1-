@@ -30,6 +30,7 @@ export type ModuleKey =
   | 'dashboard'
   | 'kib'
   | 'kendaraan'
+  | 'kir'
   | 'qr_scanner'
   | 'mutasi'
   | 'opname_laporan'
@@ -221,6 +222,7 @@ export interface VehicleItem {
   nomorMesin: string;
   statusPajak: TaxStatus;
   pajakBerlakuSampai: string;
+  stnkBerlakuSampai?: string;
   statusBpkb: BpkbStatus;
   nomorBpkb?: string;
   locationId: string;
@@ -249,3 +251,29 @@ export interface VehicleMaintenanceRecord {
   buktiDataUrl?: string;
   dicatatOleh: string;
 }
+
+export interface RoomUnit {
+  id: string;
+  kodeRuang: string;
+  namaRuang: string;
+  locationId: string;
+  penanggungJawab: string;
+  nipPenanggungJawab: string;
+  jabatanPenanggungJawab: string;
+  lantaiGedung: string;
+}
+
+export interface RoomAssetEntry {
+  id: string;
+  roomId: string;
+  namaBarang: string;
+  merkModel: string;
+  tahunPerolehan: number;
+  kodeBarang: string;
+  nomorRegister: string;
+  jumlah: number;
+  satuan: string;
+  kondisi: ConditionStatus;
+  keterangan: string;
+}
+

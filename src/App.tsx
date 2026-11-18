@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LogIn, LogOut, Menu } from 'lucide-react';
+import { AssetPublicProfileView } from './components/AssetPublicProfileView';
 import { DashboardView } from './components/DashboardView';
 import { KibManagementView } from './components/KibManagementView';
+import { KirRoomCardView } from './components/KirRoomCardView';
 import { LoginView } from './components/LoginView';
 import { MutationView } from './components/MutationView';
 import { OpnameReportView } from './components/OpnameReportView';
@@ -14,6 +16,8 @@ import {
   INITIAL_DAMAGE_REPORTS,
   INITIAL_LOCATIONS,
   INITIAL_MUTATIONS,
+  INITIAL_ROOMS,
+  INITIAL_ROOM_ITEMS,
   INITIAL_VEHICLES,
   INITIAL_VEHICLE_MAINTENANCE,
   ROLE_PROFILES,
@@ -31,6 +35,8 @@ import {
   OpnameStatus,
   RoleId,
   RoleProfile,
+  RoomAssetEntry,
+  RoomUnit,
   VehicleItem,
   VehicleMaintenanceRecord,
 } from './types/simas';
@@ -50,12 +56,15 @@ interface PersistedDomainState {
   damageReports: DamageReport[];
   vehicles: VehicleItem[];
   vehicleMaintenances: VehicleMaintenanceRecord[];
+  rooms: RoomUnit[];
+  roomItems: RoomAssetEntry[];
 }
 
 const MODULE_TITLES: Record<ModuleKey, string> = {
   dashboard: 'Dashboard Eksekutif',
   kib: 'Manajemen KIB A–F',
   kendaraan: 'Inventaris Kendaraan (Roda 4 & Roda 2)',
+  kir: 'Kartu Inventaris Ruangan (KIR)',
   qr_scanner: 'QR Code & Pemindai Lapangan',
   mutasi: 'Mutasi & Lokasi Aset',
   opname_laporan: 'Opname Fisik & Pelaporan Kerusakan',
@@ -108,6 +117,10 @@ function loadInitialDomainState(): PersistedDomainState {
           vehicleMaintenances: Array.isArray(parsed.vehicleMaintenances)
             ? parsed.vehicleMaintenances
             : INITIAL_VEHICLE_MAINTENANCE,
+          rooms: Array.isArray(parsed.rooms) ? parsed.rooms : INITIAL_ROOMS,
+          roomItems: Array.isArray(parsed.roomItems)
+            ? parsed.roomItems
+            : INITIAL_ROOM_ITEMS,
         };
       }
     }
@@ -120,6 +133,8 @@ function loadInitialDomainState(): PersistedDomainState {
     damageReports: INITIAL_DAMAGE_REPORTS,
     vehicles: INITIAL_VEHICLES,
     vehicleMaintenances: INITIAL_VEHICLE_MAINTENANCE,
+    rooms: INITIAL_ROOMS,
+    roomItems: INITIAL_ROOM_ITEMS,
   };
 }
 
@@ -147,9 +162,39 @@ function loadStoredSession(): AuthSession | null {
   return null;
 }
 
+function parseAssetDetailFromLocation(): {
+  kode: string;
+  register: string;
+  ruang: string;
+} | null {
+  try {
+    const pathname = window.location.pathname.replace(/\/+$/, '');
+    if (pathname === '/aset/detail') {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        kode: params.get('kode') ?? '',
+        register: params.get('register') ?? '',
+        ruang: params.get('ruang') ?? '',
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export default function App() {
   const initialDomain = useMemo(() => loadInitialDomainState(), []);
   const initialSession = useMemo(() => loadStoredSession(), []);
+
+  const [assetDetailRoute, setAssetDetailRoute] = useState<{
+    kode: string;
+    register: string;
+    ruang: string;
+  } | null>(() => parseAssetDetailFromLocation());
+  const [postLoginTargetModule, setPostLoginTargetModule] = useState<ModuleKey | null>(
+    null
+  );
 
   const [session, setSession] = useState<AuthSession | null>(initialSession);
   const [showLoginScreen, setShowLoginScreen] = useState<boolean>(!initialSession);
@@ -173,6 +218,8 @@ export default function App() {
   const [vehicleMaintenances, setVehicleMaintenances] = useState<
     VehicleMaintenanceRecord[]
   >(initialDomain.vehicleMaintenances);
+  const [rooms, setRooms] = useState<RoomUnit[]>(initialDomain.rooms);
+  const [roomItems, setRoomItems] = useState<RoomAssetEntry[]>(initialDomain.roomItems);
   const [activeModule, setActiveModule] = useState<ModuleKey>(
     initialSession ? initialSession.user.redirectModule : 'dashboard'
   );
@@ -186,7 +233,33 @@ export default function App() {
 
   const locations = INITIAL_LOCATIONS;
 
-  // Persist KIB & Vehicle domain data
+  // Sync browser back/forward navigation with /aset/detail route
+  useEffect(() => {
+    const onPopState = () => {
+      setAssetDetailRoute(parseAssetDetailFromLocation());
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const openAssetDetailRoute = useCallback((kode: string, register: string) => {
+    const nextUrl = `/aset/detail?kode=${encodeURIComponent(kode)}&register=${encodeURIComponent(register)}`;
+    window.history.pushState({}, '', nextUrl);
+    setAssetDetailRoute({ kode, register, ruang: '' });
+  }, []);
+
+  const openRoomDetailRoute = useCallback((roomId: string) => {
+    const nextUrl = `/aset/detail?ruang=${encodeURIComponent(roomId)}`;
+    window.history.pushState({}, '', nextUrl);
+    setAssetDetailRoute({ kode: '', register: '', ruang: roomId });
+  }, []);
+
+  const closeAssetDetailRoute = useCallback(() => {
+    window.history.pushState({}, '', '/');
+    setAssetDetailRoute(null);
+  }, []);
+
+  // Persist KIB, Vehicle & Room KIR domain data
   useEffect(() => {
     try {
       const payload: PersistedDomainState = {
@@ -195,12 +268,14 @@ export default function App() {
         damageReports,
         vehicles,
         vehicleMaintenances,
+        rooms,
+        roomItems,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Ignore storage quota issues
     }
-  }, [assets, mutations, damageReports, vehicles, vehicleMaintenances]);
+  }, [assets, mutations, damageReports, vehicles, vehicleMaintenances, rooms, roomItems]);
 
   // Verify stored session & load live RBAC config + user directory
   useEffect(() => {
@@ -287,10 +362,12 @@ export default function App() {
     setRemainingSeconds(
       Math.max(0, newSession.expiresAt - Math.floor(Date.now() / 1000))
     );
-    setActiveModule(newSession.user.redirectModule);
+    const targetMod = postLoginTargetModule ?? newSession.user.redirectModule;
+    setPostLoginTargetModule(null);
+    setActiveModule(targetMod);
     const profile = roleConfigs[newSession.user.role] ?? ROLE_PROFILES[newSession.user.role];
     showToast(
-      `Selamat datang, ${newSession.user.officerName} (${profile.shortLabel}). Dialihkan ke ${MODULE_TITLES[newSession.user.redirectModule]}.`
+      `Selamat datang, ${newSession.user.officerName} (${profile.shortLabel}). Dialihkan ke ${MODULE_TITLES[targetMod]}.`
     );
   };
 
@@ -321,6 +398,58 @@ export default function App() {
       void handleLogout();
     }
   };
+
+  const currentProfileForDetail: RoleProfile = session
+    ? {
+        ...(roleConfigs[session.user.role] ?? ROLE_PROFILES[session.user.role]),
+        officerName: session.user.officerName,
+        nip: session.user.nip,
+        unitName: session.user.unitName,
+      }
+    : PUBLIC_GUEST_PROFILE;
+
+  // Public/Internal Asset & Room KIR Profile Route (/aset/detail?kode=...&register=... or ?ruang=...)
+  if (assetDetailRoute) {
+    return (
+      <AssetPublicProfileView
+        kodeParam={assetDetailRoute.kode}
+        registerParam={assetDetailRoute.register}
+        ruangParam={assetDetailRoute.ruang}
+        assets={assets}
+        vehicles={vehicles}
+        vehicleMaintenances={vehicleMaintenances}
+        locations={locations}
+        mutations={mutations}
+        damageReports={damageReports}
+        rooms={rooms}
+        roomItems={roomItems}
+        session={session}
+        roleProfile={currentProfileForDetail}
+        onBackToDashboard={() => {
+          closeAssetDetailRoute();
+          setShowLoginScreen(false);
+          setActiveModule('dashboard');
+        }}
+        onEditDataAction={({ type }) => {
+          const destModule: ModuleKey =
+            type === 'vehicle' ? 'kendaraan' : type === 'kir' ? 'kir' : 'kib';
+          closeAssetDetailRoute();
+          if (!session) {
+            setPostLoginTargetModule(destModule);
+            setSessionNotice(
+              'Silakan masuk menggunakan akun pegawai berwenang untuk mengubah atau mencetak data.'
+            );
+            setShowLoginScreen(true);
+            return;
+          }
+          setActiveModule(destModule);
+        }}
+        onSelectAlternateAsset={(kode, register) => {
+          openAssetDetailRoute(kode, register);
+        }}
+      />
+    );
+  }
 
   // Show dedicated Login screen unless user chooses Public Observer mode
   if (!session && showLoginScreen) {
@@ -364,8 +493,10 @@ export default function App() {
     setDamageReports(INITIAL_DAMAGE_REPORTS);
     setVehicles(INITIAL_VEHICLES);
     setVehicleMaintenances(INITIAL_VEHICLE_MAINTENANCE);
+    setRooms(INITIAL_ROOMS);
+    setRoomItems(INITIAL_ROOM_ITEMS);
     localStorage.removeItem(STORAGE_KEY);
-    showToast('Data simulasi KIB & Kendaraan SIMAS-BMD telah dikembalikan ke kondisi awal.');
+    showToast('Data simulasi KIB, Kendaraan & KIR SIMAS-BMD telah dikembalikan ke kondisi awal.');
   };
 
   const handleAddVehicle = (newVehicle: Omit<VehicleItem, 'id'>) => {
@@ -408,6 +539,28 @@ export default function App() {
     };
     setVehicleMaintenances((prev) => [newRecord, ...prev]);
     showToast(`Riwayat pemeliharaan/perbaikan ${newRecord.id} berhasil dicatat.`);
+  };
+
+  const handleAddRoom = (newRoom: Omit<RoomUnit, 'id'>) => {
+    if (!activeRoleProfile.permissions.canCreateAsset) return;
+    const seq = rooms.length + 1;
+    const id = `RM-${String(seq).padStart(2, '0')}`;
+    setRooms((prev) => [...prev, { ...newRoom, id }]);
+    showToast(`Ruangan KIR baru "${newRoom.namaRuang}" (${newRoom.kodeRuang}) ditambahkan.`);
+  };
+
+  const handleAddRoomItem = (newItem: Omit<RoomAssetEntry, 'id'>) => {
+    if (!activeRoleProfile.permissions.canCreateAsset) return;
+    const seq = roomItems.length + 1;
+    const id = `KIR-${String(seq).padStart(3, '0')}`;
+    setRoomItems((prev) => [...prev, { ...newItem, id }]);
+    showToast(`Barang "${newItem.namaBarang}" ditambahkan ke Kartu Inventaris Ruangan.`);
+  };
+
+  const handleDeleteRoomItem = (itemId: string) => {
+    if (!activeRoleProfile.permissions.canDeleteAsset) return;
+    setRoomItems((prev) => prev.filter((item) => item.id !== itemId));
+    showToast(`Item KIR ${itemId} dihapus dari daftar ruangan.`);
   };
 
   const handleAddAsset = (newAsset: Omit<AssetItem, 'id' | 'qrPayload'>) => {
@@ -814,6 +967,7 @@ export default function App() {
                 setPreselectDamageAssetId(assetId);
                 setActiveModule('opname_laporan');
               }}
+              onOpenPublicProfile={openAssetDetailRoute}
             />
           )}
 
@@ -830,9 +984,23 @@ export default function App() {
             />
           )}
 
+          {session && safeActiveModule === 'kir' && (
+            <KirRoomCardView
+              rooms={rooms}
+              roomItems={roomItems}
+              locations={locations}
+              roleProfile={activeRoleProfile}
+              onAddRoom={handleAddRoom}
+              onAddRoomItem={handleAddRoomItem}
+              onDeleteRoomItem={handleDeleteRoomItem}
+              onOpenRoomPublicView={openRoomDetailRoute}
+            />
+          )}
+
           {session && safeActiveModule === 'qr_scanner' && (
             <QrScannerView
               assets={assets}
+              vehicles={vehicles}
               locations={locations}
               mutations={mutations}
               damageReports={damageReports}
@@ -842,6 +1010,7 @@ export default function App() {
                 setPreselectDamageAssetId(assetId);
                 setActiveModule('opname_laporan');
               }}
+              onOpenPublicProfile={openAssetDetailRoute}
             />
           )}
 

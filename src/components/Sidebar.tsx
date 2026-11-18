@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ArrowLeftRight,
+  Building2,
   ClipboardCheck,
   Clock,
   Database,
@@ -39,6 +40,7 @@ const NAV_ITEMS: {
   { key: 'dashboard', label: 'Dashboard Eksekutif', icon: LayoutDashboard },
   { key: 'kib', label: 'Manajemen KIB A–F', icon: Database },
   { key: 'kendaraan', label: 'Inventaris Kendaraan', icon: Truck },
+  { key: 'kir', label: 'Kartu Inventaris Ruangan', icon: Building2 },
   { key: 'qr_scanner', label: 'QR Code & Scanner', icon: QrCode },
   { key: 'mutasi', label: 'Mutasi & Lokasi Aset', icon: ArrowLeftRight },
   { key: 'opname_laporan', label: 'Opname & Pelaporan', icon: ClipboardCheck },

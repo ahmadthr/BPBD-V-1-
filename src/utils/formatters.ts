@@ -40,6 +40,77 @@ export function formatDateID(isoDate: string): string {
   }).format(parsed);
 }
 
+export interface TaxExpiryInfo {
+  status: 'EXPIRED' | 'EXPIRING_SOON' | 'ACTIVE' | 'UNKNOWN';
+  daysRemaining: number;
+  shortText: string;
+  textClass: string;
+}
+
+export function getTaxExpiryInfo(isoDate?: string): TaxExpiryInfo {
+  if (!isoDate) {
+    return {
+      status: 'UNKNOWN',
+      daysRemaining: 0,
+      shortText: 'Tanggal belum diisi',
+      textClass: 'text-slate-500',
+    };
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim());
+  const expiry = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(isoDate);
+  if (Number.isNaN(expiry.getTime())) {
+    return {
+      status: 'UNKNOWN',
+      daysRemaining: 0,
+      shortText: isoDate,
+      textClass: 'text-slate-500',
+    };
+  }
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const expiryMidnight = new Date(
+    expiry.getFullYear(),
+    expiry.getMonth(),
+    expiry.getDate()
+  );
+  const daysRemaining = Math.round(
+    (expiryMidnight.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (daysRemaining < 0) {
+    return {
+      status: 'EXPIRED',
+      daysRemaining,
+      shortText: `Berakhir ${Math.abs(daysRemaining)} hari lalu`,
+      textClass: 'text-red-700',
+    };
+  }
+  if (daysRemaining === 0) {
+    return {
+      status: 'EXPIRING_SOON',
+      daysRemaining: 0,
+      shortText: 'Berakhir hari ini',
+      textClass: 'text-red-700',
+    };
+  }
+  if (daysRemaining <= 30) {
+    return {
+      status: 'EXPIRING_SOON',
+      daysRemaining,
+      shortText: `Segera berakhir (${daysRemaining} hari lagi)`,
+      textClass: 'text-amber-700',
+    };
+  }
+  return {
+    status: 'ACTIVE',
+    daysRemaining,
+    shortText: `Aktif (${daysRemaining} hari lagi)`,
+    textClass: 'text-emerald-700',
+  };
+}
+
 export const KIB_META: Record<
   KibCategory,
   { code: string; name: string; fullName: string; description: string }

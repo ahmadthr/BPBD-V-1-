@@ -32,7 +32,7 @@ import {
   VehicleItem,
   VehicleMaintenanceRecord,
 } from '../types/simas';
-import { formatDateID, formatIDR } from '../utils/formatters';
+import { formatDateID, formatIDR, getTaxExpiryInfo } from '../utils/formatters';
 import { ConditionIndicator } from './StatusText';
 
 interface VehicleInventoryViewProps {
@@ -95,6 +95,9 @@ const EMPTY_VEHICLE_FORM: Omit<VehicleItem, 'id'> = {
   pajakBerlakuSampai: new Date(new Date().setFullYear(new Date().getFullYear() + 1))
     .toISOString()
     .slice(0, 10),
+  stnkBerlakuSampai: new Date(new Date().setFullYear(new Date().getFullYear() + 5))
+    .toISOString()
+    .slice(0, 10),
   statusBpkb: 'SUDAH_KELUAR',
   nomorBpkb: '',
   locationId: 'LOC-MAKO',
@@ -142,7 +145,9 @@ function exportVehiclesToCSV(
     'No. Rangka',
     'No. Mesin',
     'Status Pajak',
-    'Masa Berlaku Pajak',
+    'Masa Pajak Kendaraan Berakhir',
+    'Keterangan Jatuh Tempo Pajak',
+    'STNK 5 Tahunan Berakhir',
     'Status BPKB',
     'No. BPKB',
     'Lokasi Penempatan',
@@ -163,8 +168,9 @@ function exportVehiclesToCSV(
     return str;
   };
 
-  const rows = vehicles.map((v) =>
-    [
+  const rows = vehicles.map((v) => {
+    const expiryInfo = getTaxExpiryInfo(v.pajakBerlakuSampai);
+    return [
       v.id,
       v.kategori === 'RODA_4' ? 'Roda 4' : 'Roda 2',
       v.nomorPolisi,
@@ -175,6 +181,8 @@ function exportVehiclesToCSV(
       v.nomorMesin,
       v.statusPajak === 'LUNAS_AKTIF' ? 'Lunas/Aktif' : 'Belum Bayar',
       v.pajakBerlakuSampai,
+      expiryInfo.shortText,
+      v.stnkBerlakuSampai ?? '-',
       v.statusBpkb === 'SUDAH_KELUAR'
         ? 'BPKB Sudah Keluar'
         : 'BPKB Belum Keluar / Masih Proses',
@@ -189,8 +197,8 @@ function exportVehiclesToCSV(
       costByVehicle.get(v.id) ?? 0,
     ]
       .map(escapeCsv)
-      .join(',')
-  );
+      .join(',');
+  });
 
   const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -216,7 +224,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<VehicleCategory | 'ALL'>('ALL');
   const [locationFilter, setLocationFilter] = useState<string>('ALL');
-  const [taxFilter, setTaxFilter] = useState<TaxStatus | 'ALL'>('ALL');
+  const [taxFilter, setTaxFilter] = useState<TaxStatus | 'ALL' | 'EXPIRED_OR_SOON'>('ALL');
   const [bpkbFilter, setBpkbFilter] = useState<BpkbStatus | 'ALL'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<AcquisitionSource | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -262,7 +270,18 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
     return vehicles.filter((v) => {
       if (categoryFilter !== 'ALL' && v.kategori !== categoryFilter) return false;
       if (locationFilter !== 'ALL' && v.locationId !== locationFilter) return false;
-      if (taxFilter !== 'ALL' && v.statusPajak !== taxFilter) return false;
+      if (taxFilter === 'EXPIRED_OR_SOON') {
+        const exp = getTaxExpiryInfo(v.pajakBerlakuSampai);
+        if (
+          v.statusPajak !== 'BELUM_BAYAR' &&
+          exp.status !== 'EXPIRED' &&
+          exp.status !== 'EXPIRING_SOON'
+        ) {
+          return false;
+        }
+      } else if (taxFilter !== 'ALL' && v.statusPajak !== taxFilter) {
+        return false;
+      }
       if (bpkbFilter !== 'ALL' && v.statusBpkb !== bpkbFilter) return false;
       if (sourceFilter !== 'ALL' && v.sumberPerolehan !== sourceFilter) return false;
       if (!q) return true;
@@ -294,7 +313,13 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   const stats = useMemo(() => {
     const r4 = vehicles.filter((v) => v.kategori === 'RODA_4').length;
     const r2 = vehicles.filter((v) => v.kategori === 'RODA_2').length;
-    const taxUnpaid = vehicles.filter((v) => v.statusPajak === 'BELUM_BAYAR').length;
+    const taxExpiredOrUnpaid = vehicles.filter((v) => {
+      const exp = getTaxExpiryInfo(v.pajakBerlakuSampai);
+      return v.statusPajak === 'BELUM_BAYAR' || exp.status === 'EXPIRED';
+    }).length;
+    const taxExpiringSoon = vehicles.filter(
+      (v) => getTaxExpiryInfo(v.pajakBerlakuSampai).status === 'EXPIRING_SOON'
+    ).length;
     const bpkbProcess = vehicles.filter(
       (v) => v.statusBpkb === 'BELUM_KELUAR_PROSES'
     ).length;
@@ -302,7 +327,15 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
       (v) => v.sumberPerolehan !== 'APBD Kabupaten'
     ).length;
     const totalMaintenanceCost = maintenances.reduce((sum, m) => sum + m.biaya, 0);
-    return { r4, r2, taxUnpaid, bpkbProcess, hibahCount, totalMaintenanceCost };
+    return {
+      r4,
+      r2,
+      taxExpiredOrUnpaid,
+      taxExpiringSoon,
+      bpkbProcess,
+      hibahCount,
+      totalMaintenanceCost,
+    };
   }, [vehicles, maintenances]);
 
   const canRecordMaintenance =
@@ -464,12 +497,18 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
 
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-            <span>Pajak Belum Bayar</span>
+            <span>Pajak Berakhir / Tunggak</span>
             <AlertTriangle className="w-4 h-4 text-red-600" aria-hidden="true" />
           </div>
           <p className="font-display text-2xl font-bold text-red-700 mt-1.5 tabular-nums">
-            {stats.taxUnpaid} <span className="text-xs font-normal text-slate-500">Unit</span>
+            {stats.taxExpiredOrUnpaid}{' '}
+            <span className="text-xs font-normal text-slate-500">Unit</span>
           </p>
+          {stats.taxExpiringSoon > 0 && (
+            <p className="text-[11px] font-semibold text-amber-700 mt-0.5 tabular-nums">
+              +{stats.taxExpiringSoon} unit berakhir ≤30 hari
+            </p>
+          )}
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg p-4">
@@ -553,11 +592,14 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
         <div className="md:col-span-2">
           <select
             value={taxFilter}
-            onChange={(e) => setTaxFilter(e.target.value as TaxStatus | 'ALL')}
-            aria-label="Filter status pajak"
+            onChange={(e) =>
+              setTaxFilter(e.target.value as TaxStatus | 'ALL' | 'EXPIRED_OR_SOON')
+            }
+            aria-label="Filter status dan masa pajak"
             className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:border-[#0B2545]"
           >
             <option value="ALL">Semua Status Pajak</option>
+            <option value="EXPIRED_OR_SOON">Masa Pajak Berakhir / ≤30 Hari</option>
             <option value="LUNAS_AKTIF">Pajak Lunas / Aktif</option>
             <option value="BELUM_BAYAR">Pajak Belum Bayar</option>
           </select>
@@ -657,38 +699,53 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 whitespace-nowrap align-top">
-                        <div className="flex items-center gap-1.5 font-semibold">
-                          {v.statusPajak === 'LUNAS_AKTIF' ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700">
-                              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                              Pajak Lunas/Aktif
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-red-700">
-                              <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-                              Pajak Belum Bayar
-                            </span>
-                          )}
-                        </div>
-                        <div className="font-mono text-[11px] text-slate-500 mt-0.5 tabular-nums">
-                          s.d. {formatDateID(v.pajakBerlakuSampai)}
-                        </div>
-                        <div className="mt-1.5 text-[11px] font-medium">
-                          {v.statusBpkb === 'SUDAH_KELUAR' ? (
-                            <span className="text-slate-700">
-                              BPKB Sudah Keluar{' '}
-                              {v.nomorBpkb ? (
-                                <span className="font-mono text-slate-500">
-                                  ({v.nomorBpkb})
-                                </span>
-                              ) : null}
-                            </span>
-                          ) : (
-                            <span className="text-amber-700 font-semibold">
-                              BPKB Belum Keluar / Proses
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const expiry = getTaxExpiryInfo(v.pajakBerlakuSampai);
+                          return (
+                            <>
+                              <div className="flex items-center gap-1.5 font-semibold">
+                                {v.statusPajak === 'LUNAS_AKTIF' ? (
+                                  <span className="inline-flex items-center gap-1 text-emerald-700">
+                                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                    Pajak Lunas/Aktif
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-red-700">
+                                    <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                                    Pajak Belum Bayar
+                                  </span>
+                                )}
+                              </div>
+                              <div className="font-mono text-[11px] text-slate-700 mt-0.5 tabular-nums">
+                                Pajak Berakhir: {formatDateID(v.pajakBerlakuSampai)}
+                              </div>
+                              <div className={`text-[11px] font-semibold tabular-nums ${expiry.textClass}`}>
+                                {expiry.shortText}
+                              </div>
+                              {v.stnkBerlakuSampai && (
+                                <div className="font-mono text-[10px] text-slate-500 mt-0.5 tabular-nums">
+                                  STNK 5 Thn: {formatDateID(v.stnkBerlakuSampai)}
+                                </div>
+                              )}
+                              <div className="mt-1.5 text-[11px] font-medium">
+                                {v.statusBpkb === 'SUDAH_KELUAR' ? (
+                                  <span className="text-slate-700">
+                                    BPKB Sudah Keluar{' '}
+                                    {v.nomorBpkb ? (
+                                      <span className="font-mono text-slate-500">
+                                        ({v.nomorBpkb})
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-700 font-semibold">
+                                    BPKB Belum Keluar / Proses
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </td>
 
                       <td className="py-3.5 px-4 align-top max-w-[230px]">
@@ -1014,7 +1071,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
                       Status Pajak STNK *
@@ -1035,7 +1092,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Masa Berlaku Pajak *
+                      Masa Pajak Kendaraan Berakhir (Tahunan) *
                     </label>
                     <input
                       type="date"
@@ -1050,6 +1107,25 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                       className="w-full px-3 py-2 border border-slate-300 rounded-md font-mono"
                     />
                   </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Masa STNK 5 Tahunan Berakhir
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.stnkBerlakuSampai ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          stnkBerlakuSampai: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
                       Keterangan BPKB *
@@ -1383,11 +1459,28 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                       </span>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <span className="text-slate-500">Berlaku Pajak s.d.</span>
-                      <span className="font-mono text-slate-900 tabular-nums">
-                        {formatDateID(detailVehicle.pajakBerlakuSampai)}
+                      <span className="text-slate-500">Masa Pajak Berakhir</span>
+                      <span className="text-right">
+                        <span className="font-mono font-semibold text-slate-900 tabular-nums block">
+                          {formatDateID(detailVehicle.pajakBerlakuSampai)}
+                        </span>
+                        <span
+                          className={`text-[11px] font-semibold tabular-nums ${
+                            getTaxExpiryInfo(detailVehicle.pajakBerlakuSampai).textClass
+                          }`}
+                        >
+                          {getTaxExpiryInfo(detailVehicle.pajakBerlakuSampai).shortText}
+                        </span>
                       </span>
                     </div>
+                    {detailVehicle.stnkBerlakuSampai && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-500">STNK 5 Tahunan Berakhir</span>
+                        <span className="font-mono text-slate-900 tabular-nums">
+                          {formatDateID(detailVehicle.stnkBerlakuSampai)}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between gap-2 pt-1 border-t border-slate-200">
                       <span className="text-slate-500">Status BPKB</span>
                       <span

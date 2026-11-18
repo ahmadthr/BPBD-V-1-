@@ -83,8 +83,9 @@ function getLocalStore(): LocalAuthStore {
       if (Array.isArray(parsed.accounts) && parsed.roleConfigs) {
         (Object.keys(parsed.roleConfigs) as RoleId[]).forEach((r) => {
           const mods = parsed.roleConfigs[r]?.allowedModules;
-          if (Array.isArray(mods) && !mods.includes('kendaraan')) {
-            mods.push('kendaraan');
+          if (Array.isArray(mods)) {
+            if (!mods.includes('kendaraan')) mods.push('kendaraan');
+            if (!mods.includes('kir')) mods.push('kir');
           }
         });
         return parsed;

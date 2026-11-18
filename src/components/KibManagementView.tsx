@@ -38,6 +38,7 @@ interface KibManagementViewProps {
   onDeleteAsset: (assetId: string) => void;
   onQuickNavigateToMutation: (assetId: string) => void;
   onQuickNavigateToDamage: (assetId: string) => void;
+  onOpenPublicProfile?: (kode: string, register: string) => void;
 }
 
 const KIB_TABS: { key: KibCategory | 'ALL'; label: string }[] = [
@@ -82,6 +83,7 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
   onDeleteAsset,
   onQuickNavigateToMutation,
   onQuickNavigateToDamage,
+  onOpenPublicProfile,
 }) => {
   const [kibFilter, setKibFilter] = useState<KibCategory | 'ALL'>(initialKibFilter);
   const [locationFilter, setLocationFilter] = useState<string>(initialLocationFilter);
@@ -595,6 +597,10 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
                 locationMap.get(qrAsset.locationId)?.name ?? qrAsset.locationId
               }
               canPrint={roleProfile.permissions.canPrintQr}
+              onOpenPublicProfile={(kode, register) => {
+                setQrAsset(null);
+                onOpenPublicProfile?.(kode, register);
+              }}
             />
           </div>
         </div>

@@ -18,6 +18,7 @@ type ModuleKey =
   | 'dashboard'
   | 'kib'
   | 'kendaraan'
+  | 'kir'
   | 'qr_scanner'
   | 'mutasi'
   | 'opname_laporan'
@@ -202,6 +203,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       'dashboard',
       'kib',
       'kendaraan',
+      'kir',
       'qr_scanner',
       'mutasi',
       'opname_laporan',
@@ -232,6 +234,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       'dashboard',
       'kib',
       'kendaraan',
+      'kir',
       'qr_scanner',
       'mutasi',
       'opname_laporan',
@@ -262,6 +265,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       'dashboard',
       'kib',
       'kendaraan',
+      'kir',
       'qr_scanner',
       'mutasi',
       'opname_laporan',
@@ -288,7 +292,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       canViewAuditLogs: false,
       canManageRbacUsers: false,
     },
-    allowedModules: ['dashboard', 'kib', 'kendaraan', 'qr_scanner', 'mutasi', 'opname_laporan'],
+    allowedModules: ['dashboard', 'kib', 'kendaraan', 'kir', 'qr_scanner', 'mutasi', 'opname_laporan'],
   },
   PIMPINAN_VIEWER: {
     id: 'PIMPINAN_VIEWER',
@@ -310,7 +314,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       canViewAuditLogs: false,
       canManageRbacUsers: false,
     },
-    allowedModules: ['dashboard', 'kib', 'kendaraan', 'mutasi', 'opname_laporan'],
+    allowedModules: ['dashboard', 'kib', 'kendaraan', 'kir', 'mutasi', 'opname_laporan'],
   },
 };
 
