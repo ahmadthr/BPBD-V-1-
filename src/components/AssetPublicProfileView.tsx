@@ -5,7 +5,9 @@ import {
   Bike,
   Building2,
   Car,
+  Check,
   CheckCircle2,
+  Copy,
   Download,
   Edit3,
   FileCheck2,
@@ -40,7 +42,11 @@ import {
   formatIDR,
   getTaxExpiryInfo,
 } from '../utils/formatters';
-import { buildAssetDetailUrl, buildRoomDetailUrl } from '../utils/printHelper';
+import {
+  buildAssetDetailUrl,
+  buildRoomDetailUrl,
+  copyTextToClipboard,
+} from '../utils/printHelper';
 import { QrCodeImage } from './QrCodeCanvas';
 import { ConditionIndicator } from './StatusText';
 
@@ -100,6 +106,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
   onSelectAlternateAsset,
 }) => {
   const [logoFailed, setLogoFailed] = useState(false);
+  const [copiedProfileLink, setCopiedProfileLink] = useState(false);
   const [proofPreview, setProofPreview] = useState<{
     fileName: string;
     mimeType: string;
@@ -214,6 +221,15 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
   const { fullUrl: fullRoomQrUrl, pathUrl: dynamicRoomRouteUrl } =
     buildRoomDetailUrl(matchedRoom?.id ?? ruangParam);
   const dynamicRouteUrl = isRoomMode ? dynamicRoomRouteUrl : dynamicAssetRouteUrl;
+  const fullShareUrl = isRoomMode ? fullRoomQrUrl : fullAssetQrUrl;
+
+  const handleCopyProfileUrl = async () => {
+    const ok = await copyTextToClipboard(fullShareUrl);
+    if (ok) {
+      setCopiedProfileLink(true);
+      window.setTimeout(() => setCopiedProfileLink(false), 2000);
+    }
+  };
 
   const relatedMaintenances = useMemo(() => {
     if (!matchedVehicle) return [];
@@ -289,6 +305,25 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
             Endpoint: {dynamicRouteUrl}
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {isFound && (
+              <button
+                type="button"
+                onClick={() => void handleCopyProfileUrl()}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-white border border-slate-300 hover:bg-slate-50 rounded-md cursor-pointer whitespace-nowrap"
+              >
+                {copiedProfileLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-700" />
+                    Tautan Disalin
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    Salin Tautan
+                  </>
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={onBackToDashboard}

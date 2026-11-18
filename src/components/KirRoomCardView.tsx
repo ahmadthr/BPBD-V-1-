@@ -3,6 +3,8 @@ import { createPortal, flushSync } from 'react-dom';
 import QRCode from 'qrcode';
 import {
   Building2,
+  Check,
+  Copy,
   Download,
   FileCode2,
   FileText,
@@ -22,6 +24,7 @@ import {
 import {
   KirSheetRenderData,
   buildRoomDetailUrl,
+  copyTextToClipboard,
   downloadHtmlDocument,
   downloadKirPdf,
   downloadKirPng,
@@ -212,6 +215,7 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   const [busyPrint, setBusyPrint] = useState(false);
   const [printScope, setPrintScope] = useState<'current' | 'all'>('current');
   const [printFeedback, setPrintFeedback] = useState<string>('');
+  const [copiedRoomUrl, setCopiedRoomUrl] = useState<boolean>(false);
   const [roomQrDataMap, setRoomQrDataMap] = useState<Record<string, string>>({});
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
 
@@ -676,6 +680,32 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                 <Download className="w-3.5 h-3.5" />
                 CSV
               </button>
+              {roomQrLinks && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTextToClipboard(roomQrLinks.fullUrl).then((ok) => {
+                      if (ok) {
+                        setCopiedRoomUrl(true);
+                        window.setTimeout(() => setCopiedRoomUrl(false), 2000);
+                      }
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer whitespace-nowrap"
+                >
+                  {copiedRoomUrl ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-700" />
+                      Tautan Disalin
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      Salin Tautan QR
+                    </>
+                  )}
+                </button>
+              )}
             </>
           )}
         </div>

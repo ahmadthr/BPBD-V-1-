@@ -46,6 +46,7 @@ import {
   apiRefreshSession,
   apiVerifySession,
 } from './utils/authClient';
+import { buildAssetDetailUrl, buildRoomDetailUrl } from './utils/printHelper';
 
 const STORAGE_KEY = 'simas_bmd_bpbd_sidoarjo_v1';
 const AUTH_STORAGE_KEY = 'simas_bmd_jwt_session_v1';
@@ -169,13 +170,33 @@ function parseAssetDetailFromLocation(): {
 } | null {
   try {
     const pathname = window.location.pathname.replace(/\/+$/, '');
-    if (pathname === '/aset/detail') {
-      const params = new URLSearchParams(window.location.search);
-      return {
-        kode: params.get('kode') ?? '',
-        register: params.get('register') ?? '',
-        ruang: params.get('ruang') ?? '',
-      };
+    const searchParams = new URLSearchParams(window.location.search);
+
+    let hashParams: URLSearchParams | null = null;
+    let hashPath = '';
+    if (window.location.hash) {
+      const rawHash = window.location.hash.replace(/^#/, '');
+      const qIdx = rawHash.indexOf('?');
+      hashPath = (qIdx >= 0 ? rawHash.slice(0, qIdx) : rawHash).replace(/\/+$/, '');
+      if (qIdx >= 0) {
+        hashParams = new URLSearchParams(rawHash.slice(qIdx + 1));
+      }
+    }
+
+    const kode = searchParams.get('kode') ?? hashParams?.get('kode') ?? '';
+    const register =
+      searchParams.get('register') ?? hashParams?.get('register') ?? '';
+    const ruang = searchParams.get('ruang') ?? hashParams?.get('ruang') ?? '';
+    const asetMode = searchParams.get('aset') ?? hashParams?.get('aset') ?? '';
+
+    const isExplicitRoute =
+      pathname === '/aset/detail' ||
+      hashPath === '/aset/detail' ||
+      asetMode === 'detail' ||
+      asetMode === 'ruang';
+
+    if (isExplicitRoute || Boolean(kode) || Boolean(ruang)) {
+      return { kode, register, ruang };
     }
   } catch {
     // ignore
@@ -243,14 +264,14 @@ export default function App() {
   }, []);
 
   const openAssetDetailRoute = useCallback((kode: string, register: string) => {
-    const nextUrl = `/aset/detail?kode=${encodeURIComponent(kode)}&register=${encodeURIComponent(register)}`;
-    window.history.pushState({}, '', nextUrl);
+    const { pathUrl } = buildAssetDetailUrl(kode, register);
+    window.history.pushState({}, '', pathUrl);
     setAssetDetailRoute({ kode, register, ruang: '' });
   }, []);
 
   const openRoomDetailRoute = useCallback((roomId: string) => {
-    const nextUrl = `/aset/detail?ruang=${encodeURIComponent(roomId)}`;
-    window.history.pushState({}, '', nextUrl);
+    const { pathUrl } = buildRoomDetailUrl(roomId);
+    window.history.pushState({}, '', pathUrl);
     setAssetDetailRoute({ kode: '', register: '', ruang: roomId });
   }, []);
 
@@ -1001,6 +1022,7 @@ export default function App() {
             <QrScannerView
               assets={assets}
               vehicles={vehicles}
+              rooms={rooms}
               locations={locations}
               mutations={mutations}
               damageReports={damageReports}
@@ -1011,6 +1033,7 @@ export default function App() {
                 setActiveModule('opname_laporan');
               }}
               onOpenPublicProfile={openAssetDetailRoute}
+              onOpenRoomProfile={openRoomDetailRoute}
             />
           )}
 

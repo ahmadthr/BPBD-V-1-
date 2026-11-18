@@ -1,18 +1,26 @@
 import QRCode from 'qrcode';
 
+function getSafeOrigin(): string {
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.origin !== 'null') {
+    return window.location.origin;
+  }
+  return 'https://simas-bmd.sidoarjokab.go.id';
+}
+
 export function buildAssetDetailUrl(
   kodeBarang: string,
   nomorRegister: string
 ): { fullUrl: string; pathUrl: string } {
-  const pathUrl = `/aset/detail?kode=${encodeURIComponent(
-    kodeBarang
-  )}&register=${encodeURIComponent(nomorRegister)}`;
-  const origin =
-    typeof window !== 'undefined' && window.location?.origin
-      ? window.location.origin
-      : 'https://simas-bmd.sidoarjokab.go.id';
+  const params = new URLSearchParams({
+    aset: 'detail',
+    kode: kodeBarang,
+  });
+  if (nomorRegister) {
+    params.set('register', nomorRegister);
+  }
+  const pathUrl = `/?${params.toString()}`;
   return {
-    fullUrl: `${origin}${pathUrl}`,
+    fullUrl: `${getSafeOrigin()}${pathUrl}`,
     pathUrl,
   };
 }
@@ -21,15 +29,52 @@ export function buildRoomDetailUrl(roomId: string): {
   fullUrl: string;
   pathUrl: string;
 } {
-  const pathUrl = `/aset/detail?ruang=${encodeURIComponent(roomId)}`;
-  const origin =
-    typeof window !== 'undefined' && window.location?.origin
-      ? window.location.origin
-      : 'https://simas-bmd.sidoarjokab.go.id';
+  const params = new URLSearchParams({
+    aset: 'ruang',
+    ruang: roomId,
+  });
+  const pathUrl = `/?${params.toString()}`;
   return {
-    fullUrl: `${origin}${pathUrl}`,
+    fullUrl: `${getSafeOrigin()}${pathUrl}`,
     pathUrl,
   };
+}
+
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === 'function'
+    ) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback to textarea execCommand below
+  }
+
+  try {
+    if (typeof document === 'undefined') return false;
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '-9999px';
+    textarea.style.fontSize = '16px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
 }
 
 export function escapeHtml(value: string | number | undefined | null): string {

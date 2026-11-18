@@ -5,6 +5,7 @@ import { AssetItem } from '../types/simas';
 import {
   STICKER_PRINT_CSS,
   buildAssetDetailUrl,
+  copyTextToClipboard,
   downloadHtmlDocument,
   downloadStickerCardPng,
   generateStickerHtmlBlock,
@@ -139,13 +140,17 @@ export const PrintableQrSticker: React.FC<PrintableQrStickerProps> = ({
     }
   };
 
+  const [copyFailed, setCopyFailed] = useState(false);
+
   const handleCopyUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(fullUrl);
+    const ok = await copyTextToClipboard(fullUrl);
+    if (ok) {
+      setCopyFailed(false);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore clipboard restrictions
+    } else {
+      setCopyFailed(true);
+      window.setTimeout(() => setCopyFailed(false), 3000);
     }
   };
 
@@ -269,6 +274,11 @@ export const PrintableQrSticker: React.FC<PrintableQrStickerProps> = ({
             <>
               <Check className="w-3.5 h-3.5 text-emerald-700" />
               Tautan Disalin
+            </>
+          ) : copyFailed ? (
+            <>
+              <Copy className="w-3.5 h-3.5 text-amber-700" />
+              Pilih URL di atas
             </>
           ) : (
             <>
