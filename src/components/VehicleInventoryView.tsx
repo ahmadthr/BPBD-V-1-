@@ -81,7 +81,7 @@ const MAINTENANCE_TYPE_META: Record<
 };
 
 const EMPTY_VEHICLE_FORM: Omit<VehicleItem, 'id'> = {
-  kodeBarang: '1.3.2.02.01.005',
+  kodeBarang: '1.3.2.02.01.06.004',
   nomorRegister: '0001',
   kategori: 'RODA_4',
   namaKendaraan: '',
@@ -223,7 +223,9 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   onAddMaintenance,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<VehicleCategory | 'ALL'>('ALL');
-  const [locationFilter, setLocationFilter] = useState<string>('ALL');
+  const [locationFilter, setLocationFilter] = useState<string>(
+    roleProfile.assignedLocationId || 'ALL'
+  );
   const [taxFilter, setTaxFilter] = useState<TaxStatus | 'ALL' | 'EXPIRED_OR_SOON'>('ALL');
   const [bpkbFilter, setBpkbFilter] = useState<BpkbStatus | 'ALL'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<AcquisitionSource | 'ALL'>('ALL');
@@ -1029,7 +1031,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                           nomorPolisi: e.target.value.toUpperCase(),
                         })
                       }
-                      placeholder="W 8014 NP"
+                      placeholder="W 9808 NP"
                       className="w-full px-3 py-2 border border-slate-300 rounded-md font-mono uppercase"
                     />
                   </div>

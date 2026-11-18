@@ -4,10 +4,12 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Download,
+  FileSpreadsheet,
   Plus,
   Printer,
   Wrench,
 } from 'lucide-react';
+import { BAST_INVENTARIS_META, TIM_INVENTARIS_2026 } from '../data/initialData';
 import {
   AssetItem,
   ConditionStatus,
@@ -22,6 +24,7 @@ import {
   OPNAME_STATUS_META,
   exportAssetsToCSV,
   formatDateID,
+  formatIDR,
 } from '../utils/formatters';
 import { ConditionIndicator } from './StatusText';
 
@@ -414,6 +417,14 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                 </select>
                 {roleProfile.permissions.canExportReport && (
                   <>
+                    <a
+                      href={BAST_INVENTARIS_META.csvAssetUrl}
+                      download={BAST_INVENTARIS_META.csvDownloadFilename}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-amber-50 border border-amber-300 hover:bg-amber-100 rounded-md"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      Unduh CSV BAST Pengecekan
+                    </a>
                     <button
                       type="button"
                       onClick={() =>
@@ -547,6 +558,46 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Susunan Tim Inventaris BMD 2026 & Lembar Pengesahan BAST */}
+          <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-display text-sm font-bold text-slate-900">
+                  Tim Inventaris Barang Milik Daerah BPBD Kabupaten Sidoarjo Tahun 2026
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Referensi BAST KIB B Tahun {BAST_INVENTARIS_META.tahunRekap} ({BAST_INVENTARIS_META.totalRegisterKibB} Register · {formatIDR(BAST_INVENTARIS_META.totalNilaiPerolehanKibB)})
+                </p>
+              </div>
+              <a
+                href={BAST_INVENTARIS_META.csvAssetUrl}
+                download={BAST_INVENTARIS_META.csvDownloadFilename}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B2545] hover:underline no-print"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Unduh Lampiran BAST CSV
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              {TIM_INVENTARIS_2026.map((member) => (
+                <div
+                  key={member.no}
+                  className="p-3.5 rounded-md border border-slate-200 bg-slate-50/70 space-y-1"
+                >
+                  <p className="text-[11px] font-semibold text-[#0B2545]">
+                    {member.no}. {member.keterangan}
+                  </p>
+                  <p className="font-bold text-slate-900">{member.nama}</p>
+                  <p className="font-mono text-[11px] text-slate-600 tabular-nums">
+                    NIP {member.nip}
+                  </p>
+                  <p className="text-[11px] text-slate-500">{member.jabatan}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>

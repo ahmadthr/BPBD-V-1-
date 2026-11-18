@@ -398,17 +398,17 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
             <div className="pt-2 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
-                onClick={() => onSelectAlternateAsset('1.3.2.02.01.005', '0001')}
+                onClick={() => onSelectAlternateAsset('1.3.2.02.01.06.004', '0014')}
                 className="px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer"
               >
-                Uji Scan: Fire Truck Hino (W 8014 NP)
+                Uji Scan: Hino Damkar Pos Kota (W 9808 NP)
               </button>
               <button
                 type="button"
-                onClick={() => onSelectAlternateAsset('1.3.2.02.01.009', '0004')}
+                onClick={() => onSelectAlternateAsset('1.3.2.02.01.06.060', '0002')}
                 className="px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer"
               >
-                Uji Scan: Hilux Rescue Hibah BNPB
+                Uji Scan: Rescue Car Isuzu Pos Krian (W 8023 NP)
               </button>
             </div>
           </div>

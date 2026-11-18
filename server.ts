@@ -52,10 +52,13 @@ interface RoleConfig {
 interface AuthAccount {
   id: string;
   username: string;
+  aliases?: string[];
   nip: string;
   officerName: string;
+  jabatan?: string;
   role: RoleId;
   unitName: string;
+  assignedLocationId?: string;
   isActive: boolean;
   salt: string;
   passwordHash: string;
@@ -66,8 +69,10 @@ interface JwtPayload {
   username: string;
   nip: string;
   officerName: string;
+  jabatan?: string;
   role: RoleId;
   unitName: string;
+  assignedLocationId?: string;
   redirectModule: ModuleKey;
   iat: number;
   exp: number;
@@ -181,8 +186,8 @@ function verifyJwt(
 const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
   SUPER_ADMIN: {
     id: 'SUPER_ADMIN',
-    label: 'Super Admin Sistem & Tata Kelola RBAC',
-    shortLabel: 'Super Admin',
+    label: 'Super Admin & Pengurus Barang Pengguna',
+    shortLabel: 'Super Admin · Pengurus Barang',
     redirectModule: 'rbac_audit',
     permissions: {
       canCreateAsset: true,
@@ -212,8 +217,8 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
   },
   ADMIN_PENGURUS: {
     id: 'ADMIN_PENGURUS',
-    label: 'Admin Sistem / Pengurus Barang',
-    shortLabel: 'Pengurus Barang',
+    label: 'Pembantu Pengurus Barang Pengguna',
+    shortLabel: 'Pembantu Pengurus',
     redirectModule: 'kib',
     permissions: {
       canCreateAsset: true,
@@ -243,8 +248,8 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
   },
   KASUBAG_UMUM: {
     id: 'KASUBAG_UMUM',
-    label: 'Kasubag Umum & Kepegawaian',
-    shortLabel: 'Kasubag Umum',
+    label: 'Pejabat Penatausahaan Pengguna Barang',
+    shortLabel: 'Pejabat Penatausahaan',
     redirectModule: 'mutasi',
     permissions: {
       canCreateAsset: false,
@@ -274,21 +279,21 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
   },
   PETUGAS_LAPANGAN: {
     id: 'PETUGAS_LAPANGAN',
-    label: 'Petugas Lapangan / Pos Damkar',
-    shortLabel: 'Petugas Pos',
+    label: 'Admin / Operator Pos Damkar (Role Khusus Pos)',
+    shortLabel: 'Admin Pos',
     redirectModule: 'qr_scanner',
     permissions: {
       canCreateAsset: false,
       canEditAsset: false,
       canDeleteAsset: false,
-      canPrintQr: false,
+      canPrintQr: true,
       canApproveMutation: false,
       canVerifyMutation: false,
       canRequestMutation: true,
       canReportDamage: true,
       canResolveDamage: false,
       canPerformOpname: true,
-      canExportReport: false,
+      canExportReport: true,
       canViewAuditLogs: false,
       canManageRbacUsers: false,
     },
@@ -296,8 +301,8 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
   },
   PIMPINAN_VIEWER: {
     id: 'PIMPINAN_VIEWER',
-    label: 'Pimpinan / Kalaksa (Viewer)',
-    shortLabel: 'Pimpinan / Viewer',
+    label: 'Pengguna Barang (Kepala Pelaksana)',
+    shortLabel: 'Pengguna Barang',
     redirectModule: 'dashboard',
     permissions: {
       canCreateAsset: false,
@@ -322,57 +327,166 @@ const ACCOUNTS: AuthAccount[] = [
   {
     id: 'USR-000',
     username: 'superadmin',
-    nip: '198001012000011001',
-    officerName: 'Ahmad Taufik, S.Kom., M.T.',
+    aliases: ['thohir', 'ahmad.thohir', 'pengurus'],
+    nip: '198706162010011008',
+    officerName: 'Ahmad Thohir, A. Md.',
+    jabatan: 'Kasubbag. Umum dan Kepegawaian',
     role: 'SUPER_ADMIN',
-    unitName: 'Administrator Utama TI & Tata Kelola BMD BPBD',
+    unitName: 'Kasubbag. Umum & Kepegawaian · Pengurus Barang Pengguna',
     isActive: true,
     salt: 'simas-salt-00',
     passwordHash: hashPassword('SuperAdmin#2026', 'simas-salt-00'),
   },
   {
     id: 'USR-001',
-    username: 'pengurus',
-    nip: '198604122010011008',
-    officerName: 'Hendra Wijaya, S.Sos.',
+    username: 'kusnadi',
+    aliases: ['pembantu', 'pengurus2'],
+    nip: '197406012007011024',
+    officerName: 'Kusnadi, SP.',
+    jabatan: 'Analis Kebencanaan Ahli Pertama',
     role: 'ADMIN_PENGURUS',
-    unitName: 'Subbag Umum & Kepegawaian · Pengurus BMD',
+    unitName: 'Pembantu Pengurus Barang Pengguna BPBD',
     isActive: true,
     salt: 'simas-salt-01',
     passwordHash: hashPassword('BpbdSda#2026', 'simas-salt-01'),
   },
   {
     id: 'USR-002',
-    username: 'kasubag',
-    nip: '197908212005012011',
-    officerName: 'Dra. Siti Rahmawati, M.Si.',
+    username: 'karsono',
+    aliases: ['kasubag', 'penatausahaan', 'sekretaris'],
+    nip: '197209141998031004',
+    officerName: 'Karsono, SE., M. Ak.',
+    jabatan: 'Plt. Sekretaris (Kabid. Pencegahan dan Kesiapsiagaan)',
     role: 'KASUBAG_UMUM',
-    unitName: 'Sekretariat BPBD Kab. Sidoarjo',
+    unitName: 'Pejabat Penatausahaan Pengguna Barang BPBD',
     isActive: true,
     salt: 'simas-salt-02',
     passwordHash: hashPassword('Kasubag#2026', 'simas-salt-02'),
   },
   {
-    id: 'USR-003',
-    username: 'petugas',
-    nip: '199103152019031004',
-    officerName: 'Bambang Triyono',
-    role: 'PETUGAS_LAPANGAN',
-    unitName: 'Pos Damkar Buduran / Kota',
-    isActive: true,
-    salt: 'simas-salt-03',
-    passwordHash: hashPassword('PosDamkar#2026', 'simas-salt-03'),
-  },
-  {
     id: 'USR-004',
-    username: 'pimpinan',
-    nip: '197211041998031006',
-    officerName: 'Ir. Dwi Purnomo, M.T.',
+    username: 'sabino',
+    aliases: ['pimpinan', 'kalaksa', 'penggunabarang'],
+    nip: '197401081993021003',
+    officerName: 'Sabino Mariano, S. Sos., M.KP.',
+    jabatan: 'Kepala Pelaksana',
     role: 'PIMPINAN_VIEWER',
-    unitName: 'Kepala Pelaksana BPBD Kab. Sidoarjo',
+    unitName: 'Kepala Pelaksana BPBD · Pengguna Barang',
     isActive: true,
     salt: 'simas-salt-04',
     passwordHash: hashPassword('Kalaksa#2026', 'simas-salt-04'),
+  },
+  {
+    id: 'USR-POS-00',
+    username: 'pos.mako',
+    aliases: ['mako'],
+    nip: '199006112018011008',
+    officerName: 'Mochamad Irfan',
+    jabatan: 'Operator Aset Mako & Pusdalops',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Mako BPBD & Gudang Logistik Sidoarjo',
+    assignedLocationId: 'LOC-MAKO',
+    isActive: true,
+    salt: 'simas-salt-pos0',
+    passwordHash: hashPassword('PosMako#2026', 'simas-salt-pos0'),
+  },
+  {
+    id: 'USR-POS-01',
+    username: 'pos.kota',
+    aliases: ['petugas', 'kota'],
+    nip: '197804122009011001',
+    officerName: 'Satuman',
+    jabatan: 'Penanggung Jawab Pos Damkar Kota',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Kota Sidoarjo',
+    assignedLocationId: 'LOC-POS-01',
+    isActive: true,
+    salt: 'simas-salt-pos1',
+    passwordHash: hashPassword('PosKota#2026', 'simas-salt-pos1'),
+  },
+  {
+    id: 'USR-POS-02',
+    username: 'pos.buduran',
+    aliases: ['buduran'],
+    nip: '197905142010011002',
+    officerName: 'Ngadi, SH',
+    jabatan: 'Penanggung Jawab Pos Damkar Buduran',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Buduran',
+    assignedLocationId: 'LOC-POS-02',
+    isActive: true,
+    salt: 'simas-salt-pos2',
+    passwordHash: hashPassword('PosBuduran#2026', 'simas-salt-pos2'),
+  },
+  {
+    id: 'USR-POS-03',
+    username: 'pos.waru',
+    aliases: ['waru'],
+    nip: '198103102011011003',
+    officerName: 'Sutoyo',
+    jabatan: 'Penanggung Jawab Pos Damkar Waru',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Waru',
+    assignedLocationId: 'LOC-POS-03',
+    isActive: true,
+    salt: 'simas-salt-pos3',
+    passwordHash: hashPassword('PosWaru#2026', 'simas-salt-pos3'),
+  },
+  {
+    id: 'USR-POS-04',
+    username: 'pos.krian',
+    aliases: ['krian'],
+    nip: '198307182012011004',
+    officerName: 'Widy Agus Setyawan',
+    jabatan: 'Penanggung Jawab Pos Damkar Krian',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Krian',
+    assignedLocationId: 'LOC-POS-04',
+    isActive: true,
+    salt: 'simas-salt-pos4',
+    passwordHash: hashPassword('PosKrian#2026', 'simas-salt-pos4'),
+  },
+  {
+    id: 'USR-POS-05',
+    username: 'pos.porong',
+    aliases: ['porong'],
+    nip: '198409222013011005',
+    officerName: 'Edi Mulyadi',
+    jabatan: 'Penanggung Jawab Pos Damkar Porong',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Porong',
+    assignedLocationId: 'LOC-POS-05',
+    isActive: true,
+    salt: 'simas-salt-pos5',
+    passwordHash: hashPassword('PosPorong#2026', 'simas-salt-pos5'),
+  },
+  {
+    id: 'USR-POS-06',
+    username: 'pos.candi',
+    aliases: ['candi'],
+    nip: '198611052014011006',
+    officerName: 'Dita Mandariga',
+    jabatan: 'Penanggung Jawab Pos Damkar Candi',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Candi',
+    assignedLocationId: 'LOC-POS-06',
+    isActive: true,
+    salt: 'simas-salt-pos6',
+    passwordHash: hashPassword('PosCandi#2026', 'simas-salt-pos6'),
+  },
+  {
+    id: 'USR-POS-07',
+    username: 'pos.sukodono',
+    aliases: ['sukodono'],
+    nip: '198802172015011007',
+    officerName: 'Nur Achmad Zamanudin',
+    jabatan: 'Penanggung Jawab Pos Damkar Sukodono',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Sukodono',
+    assignedLocationId: 'LOC-POS-07',
+    isActive: true,
+    salt: 'simas-salt-pos7',
+    passwordHash: hashPassword('PosSukodono#2026', 'simas-salt-pos7'),
   },
 ];
 
@@ -380,21 +494,21 @@ const auditLogs: AuditLogEntry[] = [
   {
     id: 'AUD-INIT-01',
     timestamp: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
-    identifier: '197908212005012011',
-    officerName: 'Dra. Siti Rahmawati, M.Si.',
+    identifier: '197209141998031004',
+    officerName: 'Karsono, SE., M. Ak.',
     role: 'KASUBAG_UMUM',
     event: 'LOGIN_SUCCESS',
-    detail: 'Autentikasi berhasil · Redireksi otomatis ke Panel Approval Mutasi.',
+    detail: 'Autentikasi berhasil · Pejabat Penatausahaan Pengguna Barang · Redireksi ke Approval Mutasi.',
     ipAddress: '10.15.4.22',
   },
   {
     id: 'AUD-INIT-02',
     timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-    identifier: '199103152019031004',
-    officerName: 'Bambang Triyono',
+    identifier: 'pos.krian',
+    officerName: 'Widy Agus Setyawan',
     role: 'PETUGAS_LAPANGAN',
     event: 'LOGIN_SUCCESS',
-    detail: 'Autentikasi berhasil · Redireksi otomatis ke Pemindai QR Lapangan.',
+    detail: 'Autentikasi berhasil (Pos Damkar Krian) · Redireksi ke Pemindai QR Lapangan.',
     ipAddress: '10.15.8.14',
   },
 ];
@@ -425,8 +539,10 @@ function sanitizeAccount(acc: AuthAccount) {
     username: acc.username,
     nip: acc.nip,
     officerName: acc.officerName,
+    jabatan: acc.jabatan,
     role: acc.role,
     unitName: acc.unitName,
+    assignedLocationId: acc.assignedLocationId,
     isActive: acc.isActive,
   };
 }
@@ -505,9 +621,11 @@ async function startServer() {
       return;
     }
 
+    const idLower = rawIdentifier.toLowerCase();
     const account = ACCOUNTS.find(
       (a) =>
-        a.username.toLowerCase() === rawIdentifier.toLowerCase() ||
+        a.username.toLowerCase() === idLower ||
+        Boolean(a.aliases?.some((al) => al.toLowerCase() === idLower)) ||
         a.nip.replace(/\s+/g, '') === normalizedNip
     );
 
@@ -549,8 +667,10 @@ async function startServer() {
       username: account.username,
       nip: account.nip,
       officerName: account.officerName,
+      jabatan: account.jabatan,
       role: account.role,
       unitName: account.unitName,
+      assignedLocationId: account.assignedLocationId,
       redirectModule: roleConfig.redirectModule,
     });
 
@@ -559,7 +679,7 @@ async function startServer() {
       officerName: account.officerName,
       role: account.role,
       event: 'LOGIN_SUCCESS',
-      detail: `Autentikasi JWT berhasil · Arahkan ke modul ${roleConfig.redirectModule}.`,
+      detail: `Autentikasi JWT berhasil (${account.unitName}) · Arahkan ke modul ${roleConfig.redirectModule}.`,
       ipAddress,
     });
 
@@ -573,8 +693,10 @@ async function startServer() {
         username: account.username,
         nip: account.nip,
         officerName: account.officerName,
+        jabatan: account.jabatan,
         role: account.role,
         unitName: account.unitName,
+        assignedLocationId: account.assignedLocationId,
         redirectModule: roleConfig.redirectModule,
       },
     });
@@ -598,8 +720,10 @@ async function startServer() {
         username: liveAccount.username,
         nip: liveAccount.nip,
         officerName: liveAccount.officerName,
+        jabatan: liveAccount.jabatan,
         role: liveAccount.role,
         unitName: liveAccount.unitName,
+        assignedLocationId: liveAccount.assignedLocationId,
         redirectModule: roleConfig.redirectModule,
       },
     });
@@ -618,8 +742,10 @@ async function startServer() {
       username: liveAccount.username,
       nip: liveAccount.nip,
       officerName: liveAccount.officerName,
+      jabatan: liveAccount.jabatan,
       role: liveAccount.role,
       unitName: liveAccount.unitName,
+      assignedLocationId: liveAccount.assignedLocationId,
       redirectModule: roleConfig.redirectModule,
     });
 
@@ -687,6 +813,9 @@ async function startServer() {
         username: a.username,
         nip: a.nip,
         officerName: a.officerName,
+        jabatan: a.jabatan,
+        unitName: a.unitName,
+        assignedLocationId: a.assignedLocationId,
         role: a.role,
         roleLabel: ROLE_CONFIGS[a.role].label,
         redirectModule: ROLE_CONFIGS[a.role].redirectModule,
@@ -703,7 +832,7 @@ async function startServer() {
     });
   });
 
-  // Super Admin: Edit user name, NIP, unit, role, active state, or optional new password
+  // Super Admin: Edit user name, NIP, jabatan, unit, assigned Pos, role, active state, or optional new password
   app.put(
     '/api/rbac/users/:id',
     requireJwt,
@@ -718,7 +847,15 @@ async function startServer() {
 
       const nextName = String(req.body?.officerName ?? target.officerName).trim();
       const nextNip = String(req.body?.nip ?? target.nip).replace(/\s+/g, '').trim();
+      const nextJabatan =
+        typeof req.body?.jabatan === 'string' ? req.body.jabatan.trim() : target.jabatan;
       const nextUnit = String(req.body?.unitName ?? target.unitName).trim();
+      const nextAssignedLocation =
+        req.body?.assignedLocationId === ''
+          ? undefined
+          : typeof req.body?.assignedLocationId === 'string'
+            ? req.body.assignedLocationId.trim()
+            : target.assignedLocationId;
       const nextRole = (req.body?.role ?? target.role) as RoleId;
       const nextActive =
         typeof req.body?.isActive === 'boolean' ? req.body.isActive : target.isActive;
@@ -746,7 +883,9 @@ async function startServer() {
       const prevName = target.officerName;
       target.officerName = nextName;
       target.nip = nextNip;
+      target.jabatan = nextJabatan;
       target.unitName = nextUnit || target.unitName;
+      target.assignedLocationId = nextAssignedLocation;
       target.role = nextRole;
       target.isActive = nextActive;
 
@@ -771,7 +910,7 @@ async function startServer() {
     }
   );
 
-  // Super Admin: Create new officer account
+  // Super Admin: Create new officer / Pos account
   app.post(
     '/api/rbac/users',
     requireJwt,
@@ -782,7 +921,12 @@ async function startServer() {
         .toLowerCase();
       const nip = String(req.body?.nip ?? '').replace(/\s+/g, '').trim();
       const officerName = String(req.body?.officerName ?? '').trim();
+      const jabatan = String(req.body?.jabatan ?? '').trim();
       const unitName = String(req.body?.unitName ?? '').trim();
+      const assignedLocationId =
+        typeof req.body?.assignedLocationId === 'string' && req.body.assignedLocationId.trim()
+          ? req.body.assignedLocationId.trim()
+          : undefined;
       const role = req.body?.role as RoleId;
       const password = String(req.body?.password ?? '').trim();
 
@@ -810,8 +954,10 @@ async function startServer() {
         username,
         nip,
         officerName,
+        jabatan: jabatan || undefined,
         role,
         unitName: unitName || 'BPBD Kabupaten Sidoarjo',
+        assignedLocationId,
         isActive: true,
         salt,
         passwordHash: hashPassword(password, salt),

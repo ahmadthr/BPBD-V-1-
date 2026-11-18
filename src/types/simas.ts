@@ -58,6 +58,7 @@ export interface RoleProfile {
   shortLabel: string;
   officerName: string;
   nip: string;
+  jabatan?: string;
   unitName: string;
   assignedLocationId?: string;
   redirectModule: ModuleKey;
@@ -70,8 +71,10 @@ export interface ManagedUserAccount {
   username: string;
   nip: string;
   officerName: string;
+  jabatan?: string;
   role: RoleId;
   unitName: string;
+  assignedLocationId?: string;
   isActive: boolean;
 }
 
@@ -80,8 +83,10 @@ export interface AuthSessionUser {
   username: string;
   nip: string;
   officerName: string;
+  jabatan?: string;
   role: RoleId;
   unitName: string;
+  assignedLocationId?: string;
   redirectModule: ModuleKey;
 }
 

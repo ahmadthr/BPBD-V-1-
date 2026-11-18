@@ -176,7 +176,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="font-mono text-[11px] text-slate-300 tabular-nums">
                 NIP. {authUser.nip}
               </p>
+              {authUser.jabatan && (
+                <p className="text-[11px] text-slate-300 truncate">{authUser.jabatan}</p>
+              )}
               <p className="text-[11px] text-slate-400 truncate">{authUser.unitName}</p>
+              {authUser.assignedLocationId && (
+                <p className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-amber-400/20 text-amber-200 rounded">
+                  Akun Khusus Pos · {authUser.assignedLocationId}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-slate-300 pt-2 border-t border-white/10">

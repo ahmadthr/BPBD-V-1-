@@ -3,10 +3,13 @@ import {
   ArrowRight,
   Building2,
   Download,
+  FileSpreadsheet,
   Flame,
   MapPin,
   Printer,
+  Users,
 } from 'lucide-react';
+import { BAST_INVENTARIS_META, TIM_INVENTARIS_2026 } from '../data/initialData';
 import {
   AssetItem,
   AssetMutation,
@@ -112,7 +115,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
         {roleProfile.permissions.canExportReport && (
-          <div className="flex items-center gap-2 shrink-0 no-print">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 no-print">
+            <a
+              href={BAST_INVENTARIS_META.csvAssetUrl}
+              download={BAST_INVENTARIS_META.csvDownloadFilename}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-50 border border-amber-300 hover:bg-amber-100 rounded-md transition-colors whitespace-nowrap shrink-0"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              Unduh CSV BAST Pengecekan
+            </a>
             <button
               type="button"
               onClick={() => exportAssetsToCSV(assets, locations, 'rekap-aset-bpbd-sidoarjo-2026.csv')}
@@ -132,6 +143,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {roleProfile.assignedLocationId && (
+        <div className="px-4 py-3 rounded-md bg-amber-50 border border-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-amber-950">
+            <strong className="font-semibold">
+              Akun Khusus Pos Aktif:{' '}
+              {locations.find((l) => l.id === roleProfile.assignedLocationId)?.name ??
+                roleProfile.assignedLocationId}
+            </strong>
+            <span className="mx-1.5 text-amber-400">·</span>
+            <span>
+              Penanggung Jawab: {roleProfile.officerName}. Data KIB, Kendaraan &amp; KIR difokuskan ke pos penugasan Anda.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onFilterKibByLocation(roleProfile.assignedLocationId!)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md whitespace-nowrap shrink-0 cursor-pointer self-start sm:self-auto"
+          >
+            Buka Inventaris Pos Ini
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 4 Primary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -509,6 +544,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               })}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Dokumen Resmi BAST Pengecekan Inventaris & Susunan Tim Inventaris BMD 2026 */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="font-display text-base font-bold text-slate-900 flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#0B2545]" aria-hidden="true" />
+              Tim Inventaris BMD Tahun {BAST_INVENTARIS_META.tahunTim} &amp; Dokumen BAST Pengecekan
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {BAST_INVENTARIS_META.judul} · Kode OPD {BAST_INVENTARIS_META.kodeOpd} ·{' '}
+              {BAST_INVENTARIS_META.totalRegisterKibB} Register ({formatIDR(BAST_INVENTARIS_META.totalNilaiPerolehanKibB)})
+            </p>
+          </div>
+          <a
+            href={BAST_INVENTARIS_META.csvAssetUrl}
+            download={BAST_INVENTARIS_META.csvDownloadFilename}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md whitespace-nowrap shrink-0 self-start sm:self-auto"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Unduh BAST Pengecekan Inventaris (CSV)
+          </a>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                <th className="py-2.5 px-4 w-12 text-center">No</th>
+                <th className="py-2.5 px-4">Nama &amp; NIP</th>
+                <th className="py-2.5 px-4">Jabatan</th>
+                <th className="py-2.5 px-4">Keterangan / Peran BMD</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {TIM_INVENTARIS_2026.map((m) => (
+                <tr key={m.no} className="hover:bg-slate-50/70">
+                  <td className="py-2.5 px-4 text-center font-mono text-slate-500 tabular-nums">
+                    {m.no}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <div className="font-semibold text-slate-900">{m.nama}</div>
+                    <div className="font-mono text-[11px] text-slate-500 tabular-nums">
+                      NIP {m.nip}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4 text-slate-700">{m.jabatan}</td>
+                  <td className="py-2.5 px-4 font-semibold text-[#0B2545]">{m.keterangan}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -53,7 +53,7 @@ const KIB_TABS: { key: KibCategory | 'ALL'; label: string }[] = [
 
 const EMPTY_FORM: Omit<AssetItem, 'id' | 'qrPayload'> = {
   kibType: 'B',
-  kodeBarang: '1.3.2.02.01.005',
+  kodeBarang: '1.3.2.02.01.06.004',
   nomorRegister: '0001',
   namaBarang: '',
   merkTipe: '',
@@ -86,7 +86,11 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
   onOpenPublicProfile,
 }) => {
   const [kibFilter, setKibFilter] = useState<KibCategory | 'ALL'>(initialKibFilter);
-  const [locationFilter, setLocationFilter] = useState<string>(initialLocationFilter);
+  const [locationFilter, setLocationFilter] = useState<string>(
+    initialLocationFilter !== 'ALL'
+      ? initialLocationFilter
+      : roleProfile.assignedLocationId || 'ALL'
+  );
   const [conditionFilter, setConditionFilter] = useState<ConditionStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 

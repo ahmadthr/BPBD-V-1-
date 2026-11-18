@@ -48,8 +48,8 @@ import {
 } from './utils/authClient';
 import { buildAssetDetailUrl, buildRoomDetailUrl } from './utils/printHelper';
 
-const STORAGE_KEY = 'simas_bmd_bpbd_sidoarjo_v1';
-const AUTH_STORAGE_KEY = 'simas_bmd_jwt_session_v1';
+const STORAGE_KEY = 'simas_bmd_bpbd_sidoarjo_v2';
+const AUTH_STORAGE_KEY = 'simas_bmd_jwt_session_v2';
 
 interface PersistedDomainState {
   assets: AssetItem[];
@@ -247,7 +247,9 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   const [kibInitialCategory, setKibInitialCategory] = useState<KibCategory | 'ALL'>('ALL');
-  const [kibInitialLocation, setKibInitialLocation] = useState<string>('ALL');
+  const [kibInitialLocation, setKibInitialLocation] = useState<string>(
+    initialSession?.user.assignedLocationId ?? 'ALL'
+  );
   const [preselectMutationAssetId, setPreselectMutationAssetId] = useState<string>('');
   const [preselectDamageAssetId, setPreselectDamageAssetId] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -385,6 +387,8 @@ export default function App() {
     );
     const targetMod = postLoginTargetModule ?? newSession.user.redirectModule;
     setPostLoginTargetModule(null);
+    setKibInitialCategory('ALL');
+    setKibInitialLocation(newSession.user.assignedLocationId ?? 'ALL');
     setActiveModule(targetMod);
     const profile = roleConfigs[newSession.user.role] ?? ROLE_PROFILES[newSession.user.role];
     showToast(
@@ -425,7 +429,9 @@ export default function App() {
         ...(roleConfigs[session.user.role] ?? ROLE_PROFILES[session.user.role]),
         officerName: session.user.officerName,
         nip: session.user.nip,
+        jabatan: session.user.jabatan,
         unitName: session.user.unitName,
+        assignedLocationId: session.user.assignedLocationId,
       }
     : PUBLIC_GUEST_PROFILE;
 
@@ -493,7 +499,9 @@ export default function App() {
         ...(roleConfigs[session.user.role] ?? ROLE_PROFILES[session.user.role]),
         officerName: session.user.officerName,
         nip: session.user.nip,
+        jabatan: session.user.jabatan,
         unitName: session.user.unitName,
+        assignedLocationId: session.user.assignedLocationId,
       }
     : PUBLIC_GUEST_PROFILE;
 
@@ -800,7 +808,7 @@ export default function App() {
           setPreselectDamageAssetId('');
           if (mod === 'kib') {
             setKibInitialCategory('ALL');
-            setKibInitialLocation('ALL');
+            setKibInitialLocation(activeRoleProfile.assignedLocationId ?? 'ALL');
           }
           setActiveModule(mod);
         }}
@@ -852,6 +860,12 @@ export default function App() {
                   <strong className="text-[#0B2545]">
                     {activeRoleProfile.shortLabel}
                   </strong>
+                  {session.user.assignedLocationId && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-mono text-[11px] font-semibold">
+                      {locations.find((l) => l.id === session.user.assignedLocationId)?.code ??
+                        session.user.assignedLocationId}
+                    </span>
+                  )}
                 </span>
                 <button
                   type="button"
@@ -1102,7 +1116,10 @@ export default function App() {
                           ...prev.user,
                           officerName: updatedSelfUser.officerName,
                           nip: updatedSelfUser.nip,
+                          jabatan: updatedSelfUser.jabatan,
                           unitName: updatedSelfUser.unitName,
+                          assignedLocationId: updatedSelfUser.assignedLocationId,
+                          role: updatedSelfUser.role,
                         },
                       };
                       localStorage.setItem(

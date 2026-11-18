@@ -95,7 +95,9 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [copyLinkFailed, setCopyLinkFailed] = useState<boolean>(false);
   const [printingAll, setPrintingAll] = useState<boolean>(false);
-  const [generatorLocationFilter, setGeneratorLocationFilter] = useState<string>('ALL');
+  const [generatorLocationFilter, setGeneratorLocationFilter] = useState<string>(
+    roleProfile.assignedLocationId || 'ALL'
+  );
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -689,7 +691,7 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                     type="text"
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
-                    placeholder="SIMAS-BMD|BPBD-SDA|1.3.2.02.01.005|0001 atau W 8014 NP"
+                    placeholder="SIMAS-BMD|BPBD-SDA|1.3.2.02.01.06.004|0014 atau W 9808 NP"
                     className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-[#0B2545]"
                   />
                 </div>

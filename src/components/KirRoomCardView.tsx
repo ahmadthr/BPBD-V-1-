@@ -210,7 +210,13 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   onDeleteRoomItem,
   onOpenRoomPublicView,
 }) => {
-  const [selectedRoomId, setSelectedRoomId] = useState<string>(rooms[0]?.id ?? '');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>(() => {
+    if (roleProfile.assignedLocationId) {
+      const posRoom = rooms.find((r) => r.locationId === roleProfile.assignedLocationId);
+      if (posRoom) return posRoom.id;
+    }
+    return rooms[0]?.id ?? '';
+  });
   const [logoFailed, setLogoFailed] = useState(false);
   const [busyPrint, setBusyPrint] = useState(false);
   const [printScope, setPrintScope] = useState<'current' | 'all'>('current');
@@ -258,7 +264,7 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   const [roomForm, setRoomForm] = useState({
     kodeRuang: '12.15.04.01.05',
     namaRuang: '',
-    locationId: locations[0]?.id ?? 'LOC-MAKO',
+    locationId: roleProfile.assignedLocationId || locations[0]?.id || 'LOC-MAKO',
     penanggungJawab: '',
     nipPenanggungJawab: '',
     jabatanPenanggungJawab: '',
@@ -408,23 +414,23 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
         </table>
 
         <div style="font-size:10px; color:#475569; margin-bottom:8px;">
-          Catatan: B = Baik · RR = Rusak Ringan · RB = Rusak Berat. Dilarang memindahkan barang dari ruangan tanpa seizin Pengurus Barang &amp; Kasubag Umum.
+          Catatan: B = Baik · RR = Rusak Ringan · RB = Rusak Berat. Dilarang memindahkan barang dari ruangan tanpa seizin Pengurus Barang Pengguna &amp; Pejabat Penatausahaan Pengguna Barang.
         </div>
 
         <div class="kir-sign-grid">
           <div>
             <div>Mengetahui,</div>
-            <div><strong>Kasubag Umum &amp; Kepegawaian</strong></div>
+            <div><strong>Pengguna Barang / Kepala Pelaksana</strong></div>
             <div class="kir-sign-space"></div>
-            <div><u><strong>Dra. Siti Rahmawati, M.Si.</strong></u></div>
-            <div style="font-family:monospace;">NIP. 19790821 200501 2 011</div>
+            <div><u><strong>Sabino Mariano, S. Sos., M.KP.</strong></u></div>
+            <div style="font-family:monospace;">NIP. 19740108 199302 1 003</div>
           </div>
           <div>
             <div>Diperiksa Oleh,</div>
             <div><strong>Pengurus Barang Pengguna</strong></div>
             <div class="kir-sign-space"></div>
-            <div><u><strong>Hendra Wijaya, S.Sos.</strong></u></div>
-            <div style="font-family:monospace;">NIP. 19860412 201001 1 008</div>
+            <div><u><strong>Ahmad Thohir, A. Md.</strong></u></div>
+            <div style="font-family:monospace;">NIP. 19870616 201001 1 008</div>
           </div>
           <div>
             <div>Sidoarjo, ${escapeHtml(todayStr)}</div>
@@ -1024,20 +1030,20 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 text-center text-xs">
                 <div>
                   <p>Mengetahui,</p>
-                  <p className="font-bold">Kasubag Umum &amp; Kepegawaian</p>
+                  <p className="font-bold">Pengguna Barang / Kepala Pelaksana</p>
                   <div className="h-14" />
-                  <p className="font-bold underline">Dra. Siti Rahmawati, M.Si.</p>
+                  <p className="font-bold underline">Sabino Mariano, S. Sos., M.KP.</p>
                   <p className="font-mono text-[11px] text-slate-600">
-                    NIP. 19790821 200501 2 011
+                    NIP. 19740108 199302 1 003
                   </p>
                 </div>
                 <div>
                   <p>Diperiksa Oleh,</p>
                   <p className="font-bold">Pengurus Barang Pengguna</p>
                   <div className="h-14" />
-                  <p className="font-bold underline">Hendra Wijaya, S.Sos.</p>
+                  <p className="font-bold underline">Ahmad Thohir, A. Md.</p>
                   <p className="font-mono text-[11px] text-slate-600">
-                    NIP. 19860412 201001 1 008
+                    NIP. 19870616 201001 1 008
                   </p>
                 </div>
                 <div>
@@ -1556,24 +1562,24 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                       }}
                     >
                       Catatan: B = Baik · RR = Rusak Ringan · RB = Rusak Berat. Dilarang
-                      memindahkan barang dari ruangan tanpa seizin Pengurus Barang &amp;
-                      Kasubag Umum.
+                      memindahkan barang dari ruangan tanpa seizin Pengurus Barang Pengguna
+                      &amp; Pejabat Penatausahaan Pengguna Barang.
                     </div>
 
                     <div className="kir-sign-grid">
                       <div>
                         <div>Mengetahui,</div>
                         <div>
-                          <strong>Kasubag Umum &amp; Kepegawaian</strong>
+                          <strong>Pengguna Barang / Kepala Pelaksana</strong>
                         </div>
                         <div className="kir-sign-space" />
                         <div>
                           <u>
-                            <strong>Dra. Siti Rahmawati, M.Si.</strong>
+                            <strong>Sabino Mariano, S. Sos., M.KP.</strong>
                           </u>
                         </div>
                         <div style={{ fontFamily: 'monospace' }}>
-                          NIP. 19790821 200501 2 011
+                          NIP. 19740108 199302 1 003
                         </div>
                       </div>
                       <div>
@@ -1584,11 +1590,11 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                         <div className="kir-sign-space" />
                         <div>
                           <u>
-                            <strong>Hendra Wijaya, S.Sos.</strong>
+                            <strong>Ahmad Thohir, A. Md.</strong>
                           </u>
                         </div>
                         <div style={{ fontFamily: 'monospace' }}>
-                          NIP. 19860412 201001 1 008
+                          NIP. 19870616 201001 1 008
                         </div>
                       </div>
                       <div>

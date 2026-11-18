@@ -9,11 +9,12 @@ import {
   RoleProfile,
 } from '../types/simas';
 
-const FALLBACK_STORE_KEY = 'simas_bmd_local_auth_store_v1';
+const FALLBACK_STORE_KEY = 'simas_bmd_local_auth_store_v2';
 const SESSION_TTL_SECONDS = 30 * 60;
 
 interface LocalAccount extends ManagedUserAccount {
   password: string;
+  aliases?: string[];
 }
 
 interface LocalAuthStore {
@@ -26,54 +27,161 @@ const DEFAULT_LOCAL_ACCOUNTS: LocalAccount[] = [
   {
     id: 'USR-000',
     username: 'superadmin',
-    nip: '198001012000011001',
-    officerName: 'Ahmad Taufik, S.Kom., M.T.',
+    aliases: ['thohir', 'ahmad.thohir', 'pengurus'],
+    nip: '198706162010011008',
+    officerName: 'Ahmad Thohir, A. Md.',
+    jabatan: 'Kasubbag. Umum dan Kepegawaian',
     role: 'SUPER_ADMIN',
-    unitName: 'Administrator Utama TI & Tata Kelola BMD BPBD',
+    unitName: 'Kasubbag. Umum & Kepegawaian · Pengurus Barang Pengguna',
     isActive: true,
     password: 'SuperAdmin#2026',
   },
   {
     id: 'USR-001',
-    username: 'pengurus',
-    nip: '198604122010011008',
-    officerName: 'Hendra Wijaya, S.Sos.',
+    username: 'kusnadi',
+    aliases: ['pembantu', 'pengurus2'],
+    nip: '197406012007011024',
+    officerName: 'Kusnadi, SP.',
+    jabatan: 'Analis Kebencanaan Ahli Pertama',
     role: 'ADMIN_PENGURUS',
-    unitName: 'Subbag Umum & Kepegawaian · Pengurus BMD',
+    unitName: 'Pembantu Pengurus Barang Pengguna BPBD',
     isActive: true,
     password: 'BpbdSda#2026',
   },
   {
     id: 'USR-002',
-    username: 'kasubag',
-    nip: '197908212005012011',
-    officerName: 'Dra. Siti Rahmawati, M.Si.',
+    username: 'karsono',
+    aliases: ['kasubag', 'penatausahaan', 'sekretaris'],
+    nip: '197209141998031004',
+    officerName: 'Karsono, SE., M. Ak.',
+    jabatan: 'Plt. Sekretaris (Kabid. Pencegahan dan Kesiapsiagaan)',
     role: 'KASUBAG_UMUM',
-    unitName: 'Sekretariat BPBD Kab. Sidoarjo',
+    unitName: 'Pejabat Penatausahaan Pengguna Barang BPBD',
     isActive: true,
     password: 'Kasubag#2026',
   },
   {
-    id: 'USR-003',
-    username: 'petugas',
-    nip: '199103152019031004',
-    officerName: 'Bambang Triyono',
-    role: 'PETUGAS_LAPANGAN',
-    unitName: 'Pos Damkar Buduran / Kota',
-    isActive: true,
-    password: 'PosDamkar#2026',
-  },
-  {
     id: 'USR-004',
-    username: 'pimpinan',
-    nip: '197211041998031006',
-    officerName: 'Ir. Dwi Purnomo, M.T.',
+    username: 'sabino',
+    aliases: ['pimpinan', 'kalaksa', 'penggunabarang'],
+    nip: '197401081993021003',
+    officerName: 'Sabino Mariano, S. Sos., M.KP.',
+    jabatan: 'Kepala Pelaksana',
     role: 'PIMPINAN_VIEWER',
-    unitName: 'Kepala Pelaksana BPBD Kab. Sidoarjo',
+    unitName: 'Kepala Pelaksana BPBD · Pengguna Barang',
     isActive: true,
     password: 'Kalaksa#2026',
   },
+  {
+    id: 'USR-POS-00',
+    username: 'pos.mako',
+    aliases: ['mako'],
+    nip: '199006112018011008',
+    officerName: 'Mochamad Irfan',
+    jabatan: 'Operator Aset Mako & Pusdalops',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Mako BPBD & Gudang Logistik Sidoarjo',
+    assignedLocationId: 'LOC-MAKO',
+    isActive: true,
+    password: 'PosMako#2026',
+  },
+  {
+    id: 'USR-POS-01',
+    username: 'pos.kota',
+    aliases: ['petugas', 'kota'],
+    nip: '197804122009011001',
+    officerName: 'Satuman',
+    jabatan: 'Penanggung Jawab Pos Damkar Kota',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Kota Sidoarjo',
+    assignedLocationId: 'LOC-POS-01',
+    isActive: true,
+    password: 'PosKota#2026',
+  },
+  {
+    id: 'USR-POS-02',
+    username: 'pos.buduran',
+    aliases: ['buduran'],
+    nip: '197905142010011002',
+    officerName: 'Ngadi, SH',
+    jabatan: 'Penanggung Jawab Pos Damkar Buduran',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Buduran',
+    assignedLocationId: 'LOC-POS-02',
+    isActive: true,
+    password: 'PosBuduran#2026',
+  },
+  {
+    id: 'USR-POS-03',
+    username: 'pos.waru',
+    aliases: ['waru'],
+    nip: '198103102011011003',
+    officerName: 'Sutoyo',
+    jabatan: 'Penanggung Jawab Pos Damkar Waru',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Waru',
+    assignedLocationId: 'LOC-POS-03',
+    isActive: true,
+    password: 'PosWaru#2026',
+  },
+  {
+    id: 'USR-POS-04',
+    username: 'pos.krian',
+    aliases: ['krian'],
+    nip: '198307182012011004',
+    officerName: 'Widy Agus Setyawan',
+    jabatan: 'Penanggung Jawab Pos Damkar Krian',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Krian',
+    assignedLocationId: 'LOC-POS-04',
+    isActive: true,
+    password: 'PosKrian#2026',
+  },
+  {
+    id: 'USR-POS-05',
+    username: 'pos.porong',
+    aliases: ['porong'],
+    nip: '198409222013011005',
+    officerName: 'Edi Mulyadi',
+    jabatan: 'Penanggung Jawab Pos Damkar Porong',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Porong',
+    assignedLocationId: 'LOC-POS-05',
+    isActive: true,
+    password: 'PosPorong#2026',
+  },
+  {
+    id: 'USR-POS-06',
+    username: 'pos.candi',
+    aliases: ['candi'],
+    nip: '198611052014011006',
+    officerName: 'Dita Mandariga',
+    jabatan: 'Penanggung Jawab Pos Damkar Candi',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Candi',
+    assignedLocationId: 'LOC-POS-06',
+    isActive: true,
+    password: 'PosCandi#2026',
+  },
+  {
+    id: 'USR-POS-07',
+    username: 'pos.sukodono',
+    aliases: ['sukodono'],
+    nip: '198802172015011007',
+    officerName: 'Nur Achmad Zamanudin',
+    jabatan: 'Penanggung Jawab Pos Damkar Sukodono',
+    role: 'PETUGAS_LAPANGAN',
+    unitName: 'Pos Damkar Sukodono',
+    assignedLocationId: 'LOC-POS-07',
+    isActive: true,
+    password: 'PosSukodono#2026',
+  },
 ];
+
+function stripSecret(acc: LocalAccount): ManagedUserAccount {
+  const { password: _p, aliases: _a, ...rest } = acc;
+  return rest;
+}
 
 function getLocalStore(): LocalAuthStore {
   try {
@@ -101,12 +209,22 @@ function getLocalStore(): LocalAuthStore {
       {
         id: 'AUD-LOCAL-01',
         timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-        identifier: '197908212005012011',
-        officerName: 'Dra. Siti Rahmawati, M.Si.',
+        identifier: '197209141998031004',
+        officerName: 'Karsono, SE., M. Ak.',
         role: 'KASUBAG_UMUM',
         event: 'LOGIN_SUCCESS',
-        detail: 'Autentikasi berhasil · Redireksi otomatis ke Panel Approval Mutasi.',
+        detail: 'Autentikasi berhasil · Pejabat Penatausahaan Pengguna Barang · Redireksi ke Approval Mutasi.',
         ipAddress: '10.15.4.22',
+      },
+      {
+        id: 'AUD-LOCAL-02',
+        timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
+        identifier: 'pos.krian',
+        officerName: 'Widy Agus Setyawan',
+        role: 'PETUGAS_LAPANGAN',
+        event: 'LOGIN_SUCCESS',
+        detail: 'Autentikasi berhasil (Pos Damkar Krian) · Redireksi ke Pemindai QR Lapangan.',
+        ipAddress: '10.15.8.14',
       },
     ],
   };
@@ -210,10 +328,12 @@ export async function apiLogin(
 
   // Fallback for static CDN publish
   const store = getLocalStore();
+  const idLower = identifier.trim().toLowerCase();
   const normalized = identifier.trim().replace(/\s+/g, '').toLowerCase();
   const account = store.accounts.find(
     (a) =>
-      a.username.toLowerCase() === identifier.trim().toLowerCase() ||
+      a.username.toLowerCase() === idLower ||
+      Boolean(a.aliases?.some((al) => al.toLowerCase() === idLower)) ||
       a.nip.replace(/\s+/g, '').toLowerCase() === normalized
   );
 
@@ -248,8 +368,10 @@ export async function apiLogin(
     username: account.username,
     nip: account.nip,
     officerName: account.officerName,
+    jabatan: account.jabatan,
     role: account.role,
     unitName: account.unitName,
+    assignedLocationId: account.assignedLocationId,
     redirectModule: roleCfg.redirectModule,
   };
   const { token, expiresAt } = buildLocalJwt(sessionUser);
@@ -261,7 +383,7 @@ export async function apiLogin(
     officerName: account.officerName,
     role: account.role,
     event: 'LOGIN_SUCCESS',
-    detail: `Autentikasi JWT berhasil · Arahkan ke modul ${roleCfg.redirectModule}.`,
+    detail: `Autentikasi JWT berhasil (${account.unitName}) · Arahkan ke modul ${roleCfg.redirectModule}.`,
     ipAddress: 'client-web',
   });
   saveLocalStore(store);
@@ -295,8 +417,10 @@ export async function apiVerifySession(
       username: acc.username,
       nip: acc.nip,
       officerName: acc.officerName,
+      jabatan: acc.jabatan,
       role: acc.role,
       unitName: acc.unitName,
+      assignedLocationId: acc.assignedLocationId,
       redirectModule: roleCfg.redirectModule,
     },
   };
@@ -357,29 +481,23 @@ export async function apiLogout(session: AuthSession | null): Promise<void> {
   }
 }
 
-export async function apiGetPublicPersonas(): Promise<
-  Array<{
-    id: string;
-    username: string;
-    nip: string;
-    officerName: string;
-    role: RoleId;
-    roleLabel: string;
-    redirectModule: ModuleKey;
-    isActive: boolean;
-  }>
-> {
+export interface PublicPersonaRecord {
+  id: string;
+  username: string;
+  nip: string;
+  officerName: string;
+  jabatan?: string;
+  unitName?: string;
+  assignedLocationId?: string;
+  role: RoleId;
+  roleLabel: string;
+  redirectModule: ModuleKey;
+  isActive: boolean;
+}
+
+export async function apiGetPublicPersonas(): Promise<PublicPersonaRecord[]> {
   const remote = await tryApi<{
-    accounts?: Array<{
-      id: string;
-      username: string;
-      nip: string;
-      officerName: string;
-      role: RoleId;
-      roleLabel: string;
-      redirectModule: ModuleKey;
-      isActive: boolean;
-    }>;
+    accounts?: PublicPersonaRecord[];
   }>('/api/rbac/public-personas');
 
   if (!('networkUnavailable' in remote) && remote.ok && Array.isArray(remote.data.accounts)) {
@@ -392,6 +510,9 @@ export async function apiGetPublicPersonas(): Promise<
     username: a.username,
     nip: a.nip,
     officerName: a.officerName,
+    jabatan: a.jabatan,
+    unitName: a.unitName,
+    assignedLocationId: a.assignedLocationId,
     role: a.role,
     roleLabel: (store.roleConfigs[a.role] ?? ROLE_PROFILES[a.role]).label,
     redirectModule: (store.roleConfigs[a.role] ?? ROLE_PROFILES[a.role]).redirectModule,
@@ -419,7 +540,7 @@ export async function apiGetRbacConfig(token: string): Promise<{
   const store = getLocalStore();
   return {
     roleConfigs: store.roleConfigs,
-    users: store.accounts.map(({ password: _p, ...u }) => u),
+    users: store.accounts.map(stripSecret),
   };
 }
 
@@ -452,7 +573,9 @@ export async function apiUpdateUser(
   payload: {
     officerName: string;
     nip: string;
+    jabatan?: string;
     unitName: string;
+    assignedLocationId?: string;
     role: RoleId;
     isActive: boolean;
     newPassword?: string;
@@ -489,7 +612,14 @@ export async function apiUpdateUser(
   const prevName = target.officerName;
   target.officerName = payload.officerName.trim();
   target.nip = payload.nip.replace(/\s+/g, '').trim();
+  if (typeof payload.jabatan === 'string') {
+    target.jabatan = payload.jabatan.trim();
+  }
   target.unitName = payload.unitName.trim();
+  target.assignedLocationId =
+    payload.assignedLocationId && payload.assignedLocationId.trim()
+      ? payload.assignedLocationId.trim()
+      : undefined;
   if (target.role !== 'SUPER_ADMIN') {
     target.role = payload.role;
     target.isActive = payload.isActive;
@@ -508,11 +638,10 @@ export async function apiUpdateUser(
     ipAddress: 'client-web',
   });
   saveLocalStore(store);
-  const { password: _p, ...sanitized } = target;
   return {
     ok: true,
-    user: sanitized,
-    users: store.accounts.map(({ password: _pw, ...u }) => u),
+    user: stripSecret(target),
+    users: store.accounts.map(stripSecret),
   };
 }
 
@@ -523,7 +652,9 @@ export async function apiCreateUser(
     username: string;
     officerName: string;
     nip: string;
+    jabatan?: string;
     unitName: string;
+    assignedLocationId?: string;
     role: RoleId;
     password: string;
   }
@@ -564,8 +695,13 @@ export async function apiCreateUser(
     username: uname,
     nip: nipClean,
     officerName: payload.officerName.trim(),
+    jabatan: payload.jabatan?.trim() || undefined,
     role: payload.role,
     unitName: payload.unitName.trim() || 'BPBD Kabupaten Sidoarjo',
+    assignedLocationId:
+      payload.assignedLocationId && payload.assignedLocationId.trim()
+        ? payload.assignedLocationId.trim()
+        : undefined,
     isActive: true,
     password: payload.password,
   };
@@ -581,11 +717,10 @@ export async function apiCreateUser(
     ipAddress: 'client-web',
   });
   saveLocalStore(store);
-  const { password: _p, ...sanitized } = newAcc;
   return {
     ok: true,
-    user: sanitized,
-    users: store.accounts.map(({ password: _pw, ...u }) => u),
+    user: stripSecret(newAcc),
+    users: store.accounts.map(stripSecret),
   };
 }
 

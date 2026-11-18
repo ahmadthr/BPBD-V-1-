@@ -852,7 +852,7 @@ async function renderKirSheetCanvases(
     ctx.fillStyle = '#475569';
     ctx.font = '14px sans-serif';
     ctx.fillText(
-      'Catatan: B = Baik · RR = Rusak Ringan · RB = Rusak Berat. Dilarang memindahkan barang dari ruangan tanpa seizin Pengurus Barang & Kasubag Umum.',
+      'Catatan: B = Baik · RR = Rusak Ringan · RB = Rusak Berat. Dilarang memindahkan barang dari ruangan tanpa seizin Pengurus Barang Pengguna & Pejabat Penatausahaan.',
       tableX,
       Math.max(ry + 24, 945)
     );
@@ -863,16 +863,16 @@ async function renderKirSheetCanvases(
       {
         x: 310,
         top: 'Mengetahui,',
-        role: 'Kasubag Umum & Kepegawaian',
-        name: 'Dra. Siti Rahmawati, M.Si.',
-        nip: 'NIP. 19790821 200501 2 011',
+        role: 'Pengguna Barang / Kepala Pelaksana',
+        name: 'Sabino Mariano, S. Sos., M.KP.',
+        nip: 'NIP. 19740108 199302 1 003',
       },
       {
         x: 877,
         top: 'Diperiksa Oleh,',
         role: 'Pengurus Barang Pengguna',
-        name: 'Hendra Wijaya, S.Sos.',
-        nip: 'NIP. 19860412 201001 1 008',
+        name: 'Ahmad Thohir, A. Md.',
+        nip: 'NIP. 19870616 201001 1 008',
       },
       {
         x: 1444,
