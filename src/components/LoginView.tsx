@@ -212,6 +212,7 @@ const MODULE_DESC: Record<string, string> = {
   qr_scanner: 'Scanner QR & Inventaris Pos',
   dashboard: 'Dashboard Eksekutif',
   opname_laporan: 'Opname & Pelaporan',
+  pengajuan_pemeliharaan: 'Pengajuan Pemeliharaan & Nota Dinas',
 };
 
 const LOGO_PATH = '/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png';

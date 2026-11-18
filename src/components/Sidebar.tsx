@@ -13,6 +13,7 @@ import {
   Shield,
   ShieldAlert,
   Truck,
+  Wrench,
   X,
 } from 'lucide-react';
 import { AuthSessionUser, ModuleKey, RoleProfile } from '../types/simas';
@@ -25,6 +26,7 @@ interface SidebarProps {
   remainingSeconds: number;
   pendingMutationCount: number;
   pendingDamageCount: number;
+  pendingMaintenanceCount?: number;
   mobileOpen: boolean;
   onCloseMobile: () => void;
   onOpenLogin: () => void;
@@ -44,6 +46,11 @@ const NAV_ITEMS: {
   { key: 'qr_scanner', label: 'QR Code & Scanner', icon: QrCode },
   { key: 'mutasi', label: 'Mutasi & Lokasi Aset', icon: ArrowLeftRight },
   { key: 'opname_laporan', label: 'Opname & Pelaporan', icon: ClipboardCheck },
+  {
+    key: 'pengajuan_pemeliharaan',
+    label: 'Pengajuan Pemeliharaan',
+    icon: Wrench,
+  },
   { key: 'rbac_audit', label: 'Keamanan & Audit RBAC', icon: ShieldAlert },
 ];
 
@@ -61,6 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   remainingSeconds,
   pendingMutationCount,
   pendingDamageCount,
+  pendingMaintenanceCount = 0,
   mobileOpen,
   onCloseMobile,
   onOpenLogin,
@@ -125,6 +133,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           let countIndicator = 0;
           if (item.key === 'mutasi') countIndicator = pendingMutationCount;
           if (item.key === 'opname_laporan') countIndicator = pendingDamageCount;
+          if (item.key === 'pengajuan_pemeliharaan') {
+            countIndicator = pendingMaintenanceCount;
+          }
 
           return (
             <button

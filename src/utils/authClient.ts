@@ -194,6 +194,9 @@ function getLocalStore(): LocalAuthStore {
           if (Array.isArray(mods)) {
             if (!mods.includes('kendaraan')) mods.push('kendaraan');
             if (!mods.includes('kir')) mods.push('kir');
+            if (!mods.includes('pengajuan_pemeliharaan')) {
+              mods.push('pengajuan_pemeliharaan');
+            }
           }
         });
         return parsed;

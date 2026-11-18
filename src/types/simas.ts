@@ -34,6 +34,7 @@ export type ModuleKey =
   | 'qr_scanner'
   | 'mutasi'
   | 'opname_laporan'
+  | 'pengajuan_pemeliharaan'
   | 'rbac_audit';
 
 export interface RolePermissions {
@@ -286,5 +287,72 @@ export interface RoomAssetEntry {
   keterangan: string;
   fotoDataUrl?: string;
   fotoNamaFile?: string;
+}
+
+export type MaintenanceRequestStatus =
+  | 'MENUNGGU_VERIFIKASI_KASUBAG'
+  | 'DISETUJUI_KASUBAG'
+  | 'SELESAI_PERBAIKAN'
+  | 'DITOLAK';
+
+export type MaintenanceRequestCategory = 'KENDARAAN' | 'PERALATAN_BARANG';
+
+export type NotaDinasFormat = 'FORMAT_KASUBAG_UMPEG' | 'FORMAT_UNIT_POS';
+
+export interface MaintenanceDamageDetailItem {
+  id: string;
+  jenisKerusakan: string;
+  keterangan: string;
+}
+
+export interface MaintenanceRequest {
+  id: string;
+  nomorNotaDinas: string;
+  tanggalPengajuan: string;
+  kategori: MaintenanceRequestCategory;
+  locationId: string;
+  unitPelaporLabel: string;
+  vehicleId?: string;
+  assetId?: string;
+  namaBarang: string;
+  jenisPeralatan: string;
+  merkTipe: string;
+  tahunPembuatanAtauCc: string;
+  nomorPolisiOrIdentitas: string;
+  nomorRangka?: string;
+  nomorMesin?: string;
+  namaPemilikPemegang: string;
+  kronologiSingkat: string;
+  reportedCondition?: Exclude<ConditionStatus, 'BAIK'>;
+  rincianKerusakan: MaintenanceDamageDetailItem[];
+  fotoKerusakanDataUrl?: string;
+  fotoKerusakanNamaFile?: string;
+  requestedBy: string;
+  requestedByNip: string;
+  requestedByJabatan: string;
+  requestedByPangkatGol?: string;
+  requestedByRole: RoleId;
+  posAdminName?: string;
+  posAdminNip?: string;
+  posAdminJabatan?: string;
+  posAdminSignedAt?: string;
+  kepadaYthUmpeg: string;
+  tembusanUmpeg: string;
+  kepadaUnitPos: string;
+  mengetahuiUnitPosNama: string;
+  mengetahuiUnitPosJabatan: string;
+  mengetahuiUnitPosPangkat: string;
+  mengetahuiUnitPosNip: string;
+  perihal: string;
+  status: MaintenanceRequestStatus;
+  verifiedBy?: string;
+  verifiedByNip?: string;
+  verifiedByJabatan?: string;
+  verifiedByPangkatGol?: string;
+  verifyDate?: string;
+  verificationNote?: string;
+  approvedBudgetEstimate?: number;
+  bengkelRujukan?: string;
+  completedDate?: string;
 }
 

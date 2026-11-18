@@ -22,7 +22,8 @@
   }
 }
 
-#simas-print-portal {
+#simas-print-portal,
+#simas-nota-print-portal {
   display: none;
 }
 
@@ -41,10 +42,12 @@
     background-color: #ffffff !important;
     color: #000000 !important;
   }
-  body.simas-printing-portal #root {
+  body.simas-printing-portal #root,
+  body.simas-printing-nota #root {
     display: none !important;
   }
-  body.simas-printing-portal #simas-print-portal {
+  body.simas-printing-portal #simas-print-portal,
+  body.simas-printing-nota #simas-nota-print-portal {
     display: block !important;
     position: static !important;
     width: 100% !important;

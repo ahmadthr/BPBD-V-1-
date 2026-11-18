@@ -9,9 +9,11 @@ import {
   Copy,
   ExternalLink,
   FileCode2,
+  ImagePlus,
   Link2,
   Printer,
   QrCode,
+  RefreshCw,
   ScanLine,
   Search,
 } from 'lucide-react';
@@ -80,10 +82,17 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
   onOpenPublicProfile,
   onOpenRoomProfile,
 }) => {
+  const lockedLocationId = roleProfile.assignedLocationId || '';
   const [subTab, setSubTab] = useState<'scanner' | 'generator'>('scanner');
   const [manualInput, setManualInput] = useState<string>('');
   const [scannedAssetId, setScannedAssetId] = useState<string>(
-    assets[2]?.id ?? assets[0]?.id ?? ''
+    () =>
+      (lockedLocationId
+        ? assets.find((a) => a.locationId === lockedLocationId)
+        : assets[2] ?? assets[0]
+      )?.id ??
+      assets[0]?.id ??
+      ''
   );
   const [scannedCustomLink, setScannedCustomLink] = useState<{
     kode: string;
@@ -94,19 +103,34 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
   const [lastDecodedRaw, setLastDecodedRaw] = useState<string>('');
   const [isScanningAnim, setIsScanningAnim] = useState<boolean>(false);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [cameraStarting, setCameraStarting] = useState<boolean>(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string>('');
   const [opnameFeedback, setOpnameFeedback] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [copyLinkFailed, setCopyLinkFailed] = useState<boolean>(false);
   const [printingAll, setPrintingAll] = useState<boolean>(false);
   const [generatorLocationFilter, setGeneratorLocationFilter] = useState<string>(
-    roleProfile.assignedLocationId || 'ALL'
+    lockedLocationId || 'ALL'
   );
   const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const decodeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (lockedLocationId) {
+      setGeneratorLocationFilter(lockedLocationId);
+    }
+  }, [lockedLocationId]);
+
+  useEffect(() => {
+    if (scannedAssetId && !assets.some((a) => a.id === scannedAssetId)) {
+      setScannedAssetId(assets[0]?.id ?? '');
+    }
+  }, [assets, scannedAssetId]);
 
   const locationMap = useMemo(
     () => new Map(locations.map((l) => [l.id, l])),
@@ -167,7 +191,11 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraActive(false);
+    setCameraStarting(false);
   }, []);
 
   useEffect(() => {
@@ -218,6 +246,9 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                 r.id.toLowerCase() === ruang.toLowerCase() ||
                 r.kodeRuang.toLowerCase() === ruang.toLowerCase()
             );
+            if (lockedLocationId && !matchedRoom) {
+              return false;
+            }
             setScannedCustomLink(null);
             setScannedRoomLink(
               matchedRoom ?? {
@@ -255,6 +286,9 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                 v.kodeBarang.toLowerCase() === kode.toLowerCase() &&
                 (!register || v.nomorRegister.toLowerCase() === register.toLowerCase())
             );
+            if (lockedLocationId && !matchedVeh) {
+              return false;
+            }
             setScannedCustomLink({
               kode,
               register,
@@ -332,70 +366,269 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
 
       return false;
     },
-    [assets, vehicles, rooms, triggerSimulatedScan]
+    [assets, vehicles, rooms, lockedLocationId, triggerSimulatedScan]
   );
 
-  // Live camera QR frame decoder loop using jsQR
+  // Attach active MediaStream to always-mounted <video> element and ensure mobile playback
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!cameraActive || !video || !stream) return;
+
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.muted = true;
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      // Some mobile browsers delay play until metadata is ready
+    });
+  }, [cameraActive]);
+
+  // Live camera QR frame decoder loop (Native BarcodeDetector + jsQR fallback)
   useEffect(() => {
     if (!cameraActive) return;
 
+    type BarcodeDetectorCtor = new (opts?: { formats?: string[] }) => {
+      detect: (source: ImageBitmapSource) => Promise<{ rawValue?: string }[]>;
+    };
+    const DetectorCtor = (
+      window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }
+    ).BarcodeDetector;
+    const nativeDetector = DetectorCtor
+      ? new DetectorCtor({ formats: ['qr_code'] })
+      : null;
+
+    let busy = false;
     const timer = window.setInterval(() => {
+      if (busy) return;
       const video = videoRef.current;
       if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
         return;
       }
-      let canvas = decodeCanvasRef.current;
-      if (!canvas) {
-        canvas = document.createElement('canvas');
-        decodeCanvasRef.current = canvas;
-      }
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const decoded = jsQR(imgData.data, imgData.width, imgData.height, {
-        inversionAttempts: 'dontInvert',
-      });
-      if (decoded?.data) {
-        const ok = processScannedCode(decoded.data);
-        if (ok) {
-          stopCamera();
+      busy = true;
+
+      const runDecode = async () => {
+        try {
+          if (nativeDetector) {
+            try {
+              const detected = await nativeDetector.detect(video);
+              const val = detected[0]?.rawValue;
+              if (val) {
+                const ok = processScannedCode(val);
+                if (ok) {
+                  stopCamera();
+                  return;
+                }
+                setOpnameFeedback(
+                  `QR terbaca (${val}), namun data aset tidak termasuk lokasi/daftar inventaris Anda.`
+                );
+                stopCamera();
+                return;
+              }
+            } catch {
+              // Fallback to jsQR canvas frame below
+            }
+          }
+
+          let canvas = decodeCanvasRef.current;
+          if (!canvas) {
+            canvas = document.createElement('canvas');
+            decodeCanvasRef.current = canvas;
+          }
+          const maxDim = 960;
+          const scale = Math.min(
+            1,
+            maxDim / Math.max(video.videoWidth, video.videoHeight)
+          );
+          canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const decoded = jsQR(imgData.data, imgData.width, imgData.height, {
+            inversionAttempts: 'attemptBoth',
+          });
+          if (decoded?.data) {
+            const ok = processScannedCode(decoded.data);
+            if (ok) {
+              stopCamera();
+            } else {
+              setOpnameFeedback(
+                `QR terbaca (${decoded.data}), namun data aset tidak termasuk lokasi/daftar inventaris Anda.`
+              );
+              stopCamera();
+            }
+          }
+        } finally {
+          busy = false;
         }
-      }
-    }, 220);
+      };
+
+      void runDecode();
+    }, 160);
 
     return () => window.clearInterval(timer);
   }, [cameraActive, processScannedCode, stopCamera]);
+
+  const startCameraStream = async (targetFacing: 'environment' | 'user') => {
+    setCameraError('');
+    setCameraStarting(true);
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraStarting(false);
+      setCameraError(
+        'Browser atau konteks halaman saat ini belum mendukung live streaming kamera (memerlukan HTTPS). Gunakan tombol "Foto QR (HP)" untuk memotret langsung dengan kamera HP.'
+      );
+      return;
+    }
+
+    const attempts: MediaStreamConstraints[] = [
+      {
+        video: {
+          facingMode: { ideal: targetFacing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      },
+      {
+        video: { facingMode: targetFacing },
+        audio: false,
+      },
+      {
+        video: true,
+        audio: false,
+      },
+    ];
+
+    let stream: MediaStream | null = null;
+    let lastError: unknown = null;
+
+    for (const constraints of attempts) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!stream) {
+      setCameraStarting(false);
+      setCameraActive(false);
+      const errName =
+        lastError && typeof lastError === 'object' && 'name' in lastError
+          ? String((lastError as { name: string }).name)
+          : '';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+        setCameraError(
+          'Izin akses kamera ditolak oleh browser/perangkat. Pastikan izin Kamera diaktifkan pada ikon gembok/pengaturan situs Chrome, atau gunakan tombol "Foto QR (HP)" di samping.'
+        );
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        setCameraError(
+          'Perangkat kamera tidak ditemukan. Gunakan tombol "Foto QR (HP)" atau Simulasi Bidik QR di bawah.'
+        );
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+        setCameraError(
+          'Kamera sedang digunakan oleh aplikasi lain. Tutup aplikasi kamera lain lalu coba lagi, atau gunakan tombol "Foto QR (HP)".'
+        );
+      } else {
+        setCameraError(
+          `Kamera live belum dapat dibuka (${errName || 'pembatasan peramban'}). Gunakan tombol "Foto QR (HP)" untuk langsung membuka kamera HP.`
+        );
+      }
+      return;
+    }
+
+    streamRef.current = stream;
+    setCameraActive(true);
+    setCameraStarting(false);
+
+    if (videoRef.current) {
+      videoRef.current.setAttribute('playsinline', 'true');
+      videoRef.current.setAttribute('webkit-playsinline', 'true');
+      videoRef.current.muted = true;
+      videoRef.current.srcObject = stream;
+      try {
+        await videoRef.current.play();
+      } catch {
+        // play() will be retried in useEffect or onLoadedMetadata
+      }
+    }
+  };
 
   const toggleLiveCamera = async () => {
     if (cameraActive) {
       stopCamera();
       return;
     }
-    setCameraError('');
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError(
-        'Akses kamera perangkat tidak tersedia di peramban ini. Gunakan mode Simulasi Bidik QR di bawah.'
-      );
-      return;
+    await startCameraStream(facingMode);
+  };
+
+  const handleSwitchCamera = async () => {
+    const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextFacing);
+    if (cameraActive) {
+      await startCameraStream(nextFacing);
     }
+  };
+
+  const handleScanFromPhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCameraError('');
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(new Error('Gagal membaca berkas foto.'));
+        reader.readAsDataURL(file);
       });
-      streamRef.current = stream;
-      setCameraActive(true);
-      window.setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }, 60);
+
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Format gambar tidak valid.'));
+        el.src = dataUrl;
+      });
+
+      const canvas = decodeCanvasRef.current ?? document.createElement('canvas');
+      decodeCanvasRef.current = canvas;
+      const maxDim = 1200;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const decoded = jsQR(imgData.data, imgData.width, imgData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+
+      if (!decoded?.data) {
+        setCameraError(
+          'QR Code tidak terdeteksi pada foto tersebut. Pastikan stiker QR terlihat jelas, fokus, dan tidak terpotong.'
+        );
+        return;
+      }
+
+      const found = processScannedCode(decoded.data);
+      if (!found) {
+        setCameraError(
+          `QR terbaca ("${decoded.data}"), namun data aset tidak ditemukan pada daftar inventaris lokasi Anda.`
+        );
+      }
     } catch {
-      setCameraError(
-        'Izin kamera tidak diberikan atau tidak ada kamera aktif. Gunakan tombol Simulasi Bidik QR di bawah.'
-      );
+      setCameraError('Gagal memproses foto QR Code. Silakan coba ambil ulang.');
     }
   };
 
@@ -534,40 +767,81 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Panel: Camera Viewfinder & Field Trigger */}
           <div className="lg:col-span-5 bg-white border border-slate-200 rounded-lg p-5 space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-display text-sm font-bold text-slate-900">
                 Kamera Pemindai QR (Real-Time &amp; Simulasi)
               </h3>
-              <button
-                type="button"
-                onClick={toggleLiveCamera}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-md hover:bg-slate-50 text-slate-700 cursor-pointer"
-              >
-                {cameraActive ? (
-                  <>
-                    <CameraOff className="w-3.5 h-3.5" />
-                    Matikan Kamera
-                  </>
-                ) : (
-                  <>
-                    <Camera className="w-3.5 h-3.5" />
-                    Aktifkan Kamera
-                  </>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={cameraStarting}
+                  onClick={() => void toggleLiveCamera()}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border rounded-md cursor-pointer ${
+                    cameraActive
+                      ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100'
+                      : 'bg-[#0B2545] border-[#0B2545] text-white hover:bg-[#133C73]'
+                  }`}
+                >
+                  {cameraActive ? (
+                    <>
+                      <CameraOff className="w-3.5 h-3.5" />
+                      Matikan
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-3.5 h-3.5" />
+                      {cameraStarting ? 'Membuka...' : 'Aktifkan Kamera'}
+                    </>
+                  )}
+                </button>
+                {cameraActive && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSwitchCamera()}
+                    title="Ganti kamera depan / belakang"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-md hover:bg-slate-50 text-slate-700 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Putar
+                  </button>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  title="Buka kamera HP secara langsung untuk memfoto stiker QR"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-md hover:bg-slate-50 text-slate-700 cursor-pointer"
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                  Foto QR (HP)
+                </button>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => void handleScanFromPhotoFile(e)}
+                  className="sr-only"
+                  aria-label="Ambil foto stiker QR dengan kamera HP"
+                />
+              </div>
             </div>
 
             {/* Optical Viewfinder */}
             <div className="relative aspect-[4/3] w-full rounded-md bg-slate-950 overflow-hidden flex items-center justify-center border border-slate-800">
-              {cameraActive ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-              ) : (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                onLoadedMetadata={(e) => {
+                  void e.currentTarget.play().catch(() => {});
+                }}
+                className={
+                  cameraActive ? 'w-full h-full object-cover' : 'hidden'
+                }
+              />
+
+              {!cameraActive && (
                 <div className="flex flex-col items-center justify-center p-5 text-center space-y-3">
                   {activeDetailLinks ? (
                     <div className="p-2.5 bg-white rounded-md shadow-sm">
@@ -583,6 +857,12 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                         ? activeDetailLinks.pathUrl
                         : 'Arahkan kamera ke stiker QR aset'}
                   </p>
+                </div>
+              )}
+
+              {cameraActive && (
+                <div className="pointer-events-none absolute top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded bg-slate-900/80 text-emerald-300 text-[11px] font-semibold whitespace-nowrap">
+                  Kamera Aktif · Arahkan ke Stiker QR
                 </div>
               )}
 
@@ -1054,11 +1334,14 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
               </label>
               <select
                 id="qr-loc-filter"
-                value={generatorLocationFilter}
+                value={lockedLocationId || generatorLocationFilter}
+                disabled={Boolean(lockedLocationId)}
                 onChange={(e) => setGeneratorLocationFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-slate-300 rounded-md bg-white"
+                className="px-3 py-1.5 text-xs border border-slate-300 rounded-md bg-white disabled:bg-slate-100 disabled:text-slate-700"
               >
-                <option value="ALL">Semua Lokasi ({assets.length} Label)</option>
+                {!lockedLocationId && (
+                  <option value="ALL">Semua Lokasi ({assets.length} Label)</option>
+                )}
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.code} · {l.name}

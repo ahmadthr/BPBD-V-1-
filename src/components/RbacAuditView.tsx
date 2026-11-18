@@ -3,6 +3,7 @@ import {
   Check,
   Clock,
   Edit3,
+  FileSpreadsheet,
   Key,
   MapPin,
   Minus,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  Upload,
   UserCog,
   X,
 } from 'lucide-react';
@@ -20,14 +22,34 @@ import {
   apiUpdateUser,
 } from '../utils/authClient';
 import { INITIAL_LOCATIONS, ROLE_PROFILES } from '../data/initialData';
+import { ExcelImportModal } from './ExcelImportModal';
 import {
+  KIB_FIELD_ALIASES,
+  KIB_FIELD_DEFINITIONS,
+  KIR_FIELD_ALIASES,
+  KIR_FIELD_DEFINITIONS,
+  VEHICLE_FIELD_ALIASES,
+  VEHICLE_FIELD_DEFINITIONS,
+  downloadKibExcelTemplate,
+  downloadKirExcelTemplate,
+  downloadVehicleExcelTemplate,
+  mapRowsToKibAssets,
+  mapRowsToKirEntries,
+  mapRowsToVehicles,
+} from '../utils/excelImportHelper';
+import {
+  AssetItem,
   AuditLogEntry,
   AuthSession,
+  LocationUnit,
   ManagedUserAccount,
   ModuleKey,
   RoleId,
   RolePermissions,
   RoleProfile,
+  RoomAssetEntry,
+  RoomUnit,
+  VehicleItem,
 } from '../types/simas';
 
 interface RbacAuditViewProps {
@@ -35,6 +57,11 @@ interface RbacAuditViewProps {
   roleConfigs: Record<RoleId, RoleProfile>;
   users: ManagedUserAccount[];
   remainingSeconds: number;
+  locations?: LocationUnit[];
+  rooms?: RoomUnit[];
+  onImportAssets?: (items: Omit<AssetItem, 'id' | 'qrPayload'>[]) => void;
+  onImportVehicles?: (items: Omit<VehicleItem, 'id'>[]) => void;
+  onImportRoomItems?: (items: Omit<RoomAssetEntry, 'id'>[]) => void;
   onRefreshSession: () => Promise<void>;
   onRbacUpdated: (payload: {
     roleConfigs?: Record<RoleId, RoleProfile>;
@@ -80,6 +107,7 @@ const MODULE_OPTIONS: { key: ModuleKey; label: string }[] = [
   { key: 'qr_scanner', label: 'Scanner QR' },
   { key: 'dashboard', label: 'Dashboard Eksekutif' },
   { key: 'opname_laporan', label: 'Opname & Laporan' },
+  { key: 'pengajuan_pemeliharaan', label: 'Pengajuan Pemeliharaan' },
 ];
 
 function formatCountdown(seconds: number): string {
@@ -120,18 +148,42 @@ export const RbacAuditView: React.FC<RbacAuditViewProps> = ({
   roleConfigs,
   users,
   remainingSeconds,
+  locations = INITIAL_LOCATIONS,
+  rooms = [],
+  onImportAssets,
+  onImportVehicles,
+  onImportRoomItems,
   onRefreshSession,
   onRbacUpdated,
 }) => {
   const currentProfile = roleConfigs[session.user.role] ?? ROLE_PROFILES[session.user.role];
-  const isSuperAdmin = currentProfile.permissions.canManageRbacUsers;
+  const isSuperAdmin =
+    currentProfile.permissions.canManageRbacUsers &&
+    session.user.role === 'SUPER_ADMIN';
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loadingLogs, setLoadingLogs] = useState<boolean>(true);
   const [logError, setLogError] = useState<string>('');
   const [refreshingJwt, setRefreshingJwt] = useState<boolean>(false);
 
-  const locationMap = new Map(INITIAL_LOCATIONS.map((l) => [l.id, l]));
+  // Super Admin Excel Import Hub state
+  const [superImportTarget, setSuperImportTarget] = useState<
+    'kib' | 'kendaraan' | 'kir' | null
+  >(null);
+  const [importDefaultLoc, setImportDefaultLoc] = useState<string>(
+    locations[0]?.id ?? 'LOC-MAKO'
+  );
+  const [importTargetRoomId, setImportTargetRoomId] = useState<string>(
+    rooms[0]?.id ?? ''
+  );
+
+  useEffect(() => {
+    if (!importTargetRoomId && rooms.length > 0) {
+      setImportTargetRoomId(rooms[0].id);
+    }
+  }, [rooms, importTargetRoomId]);
+
+  const locationMap = new Map(locations.map((l) => [l.id, l]));
 
   // User Edit / Create Modal state
   const [editingUser, setEditingUser] = useState<ManagedUserAccount | null>(null);
@@ -425,6 +477,88 @@ export const RbacAuditView: React.FC<RbacAuditViewProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Super Admin Exclusive: Pusat Import Excel Data Eksternal */}
+      {isSuperAdmin && (
+        <div className="bg-white border border-amber-300 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 bg-amber-50/70 border-b border-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h3 className="font-display text-base font-bold text-[#0B2545] flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-amber-700" aria-hidden="true" />
+                Pusat Import Excel Data Eksternal (Khusus Super Admin)
+              </h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Hanya Super Admin yang memiliki akses mengimpor file .xlsx, .xls, atau .csv dari SIMBADA, e-BMD, SIPD, atau rekap BAST ke dalam SIMAS-BMD.
+              </p>
+            </div>
+            <span className="inline-flex items-center px-2.5 py-1 rounded bg-[#0B2545] text-amber-300 text-[11px] font-semibold whitespace-nowrap self-start sm:self-auto">
+              Akses Terbatas: SUPER_ADMIN
+            </span>
+          </div>
+
+          <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="border border-slate-200 rounded-lg p-4 flex flex-col justify-between gap-3 bg-slate-50/50">
+              <div>
+                <p className="font-display text-sm font-bold text-slate-900">
+                  Import Master KIB A–F
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Impor data barang modal, peralatan, mesin, gedung, dan aset lainnya sekaligus ke Master KIB.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!onImportAssets}
+                onClick={() => setSuperImportTarget('kib')}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-md cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import Excel Master KIB
+              </button>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg p-4 flex flex-col justify-between gap-3 bg-slate-50/50">
+              <div>
+                <p className="font-display text-sm font-bold text-slate-900">
+                  Import Kendaraan R4 &amp; R2
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Impor daftar armada dinas beserta nomor polisi, rangka, mesin, status pajak, dan BPKB.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!onImportVehicles}
+                onClick={() => setSuperImportTarget('kendaraan')}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-md cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import Excel Kendaraan
+              </button>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg p-4 flex flex-col justify-between gap-3 bg-slate-50/50">
+              <div>
+                <p className="font-display text-sm font-bold text-slate-900">
+                  Import Kartu Ruang (KIR)
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Impor rincian inventaris barang ruangan langsung ke salah satu ruangan / Pos Damkar terdaftar.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!onImportRoomItems || rooms.length === 0}
+                onClick={() => setSuperImportTarget('kir')}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-md cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import Excel KIR Ruangan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Section 1: User Directory & Edit Nama (Super Admin Editable) */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -936,6 +1070,159 @@ export const RbacAuditView: React.FC<RbacAuditViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Super Admin Excel Import Modal */}
+      {isSuperAdmin && superImportTarget === 'kib' && (
+        <ExcelImportModal
+          isOpen
+          onClose={() => setSuperImportTarget(null)}
+          title="Import Excel Master KIB (Khusus Super Admin)"
+          subtitle="Unggah file .xlsx, .xls, atau .csv dari SIMBADA / e-BMD / SIPD / rekap BAST ke Master KIB SIMAS-BMD"
+          fieldDefinitions={KIB_FIELD_DEFINITIONS}
+          fieldAliases={KIB_FIELD_ALIASES}
+          onDownloadTemplate={downloadKibExcelTemplate}
+          extraOptions={
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-800">
+                  Lokasi Default Jika Kolom Lokasi Tidak Ada di Excel
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Diterapkan bila baris Excel tidak mencantumkan kolom Mako / Pos Damkar.
+                </p>
+              </div>
+              <select
+                value={importDefaultLoc}
+                onChange={(e) => setImportDefaultLoc(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 rounded-md bg-white text-xs font-medium"
+              >
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.code} · {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+          onConfirmImport={(rows, mapping) => {
+            const parsed = mapRowsToKibAssets(
+              rows,
+              mapping,
+              locations,
+              importDefaultLoc,
+              session.user.officerName
+            );
+            if (parsed.length > 0) {
+              onImportAssets?.(parsed);
+            }
+            return {
+              importedCount: parsed.length,
+              message: `${parsed.length} register aset berhasil diimpor ke Master KIB.`,
+            };
+          }}
+        />
+      )}
+
+      {isSuperAdmin && superImportTarget === 'kendaraan' && (
+        <ExcelImportModal
+          isOpen
+          onClose={() => setSuperImportTarget(null)}
+          title="Import Excel Kendaraan R4 & R2 (Khusus Super Admin)"
+          subtitle="Unggah file .xlsx, .xls, atau .csv daftar armada dinas ke modul Kendaraan SIMAS-BMD"
+          fieldDefinitions={VEHICLE_FIELD_DEFINITIONS}
+          fieldAliases={VEHICLE_FIELD_ALIASES}
+          onDownloadTemplate={downloadVehicleExcelTemplate}
+          extraOptions={
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-800">
+                  Pos Penempatan Default Jika Kolom Pos Kosong
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Menentukan pos penempatan bila Excel tidak memuat nama Mako atau Pos Damkar.
+                </p>
+              </div>
+              <select
+                value={importDefaultLoc}
+                onChange={(e) => setImportDefaultLoc(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 rounded-md bg-white text-xs font-medium"
+              >
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.code} · {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+          onConfirmImport={(rows, mapping) => {
+            const parsed = mapRowsToVehicles(
+              rows,
+              mapping,
+              locations,
+              importDefaultLoc,
+              session.user.officerName
+            );
+            if (parsed.length > 0) {
+              onImportVehicles?.(parsed);
+            }
+            return {
+              importedCount: parsed.length,
+              message: `${parsed.length} unit kendaraan berhasil diimpor.`,
+            };
+          }}
+        />
+      )}
+
+      {isSuperAdmin && superImportTarget === 'kir' && (
+        <ExcelImportModal
+          isOpen
+          onClose={() => setSuperImportTarget(null)}
+          title="Import Excel Kartu Inventaris Ruangan (Khusus Super Admin)"
+          subtitle="Unggah daftar barang dari file Excel/CSV untuk dimasukkan ke ruangan KIR terpilih"
+          fieldDefinitions={KIR_FIELD_DEFINITIONS}
+          fieldAliases={KIR_FIELD_ALIASES}
+          onDownloadTemplate={downloadKirExcelTemplate}
+          extraOptions={
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-800">
+                  Ruangan Tujuan Impor KIR
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Seluruh baris dari file Excel akan ditambahkan ke Kartu Inventaris Ruangan ini.
+                </p>
+              </div>
+              <select
+                value={importTargetRoomId}
+                onChange={(e) => setImportTargetRoomId(e.target.value)}
+                className="px-3 py-1.5 border border-slate-300 rounded-md bg-white text-xs font-medium"
+              >
+                {rooms.map((rm) => (
+                  <option key={rm.id} value={rm.id}>
+                    {rm.kodeRuang} · {rm.namaRuang}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+          onConfirmImport={(rows, mapping) => {
+            const targetRoom =
+              rooms.find((r) => r.id === importTargetRoomId) ?? rooms[0];
+            if (!targetRoom) {
+              return { importedCount: 0, message: 'Tidak ada ruangan KIR yang tersedia.' };
+            }
+            const parsed = mapRowsToKirEntries(rows, mapping, targetRoom.id);
+            if (parsed.length > 0) {
+              onImportRoomItems?.(parsed);
+            }
+            return {
+              importedCount: parsed.length,
+              message: `${parsed.length} item barang berhasil diimpor ke ${targetRoom.namaRuang}.`,
+            };
+          }}
+        />
       )}
     </div>
   );

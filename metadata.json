@@ -1,6 +1,6 @@
 {
   "name": "SIMAS-BMD BPBD Sidoarjo",
   "description": "Sistem Inventarisasi & Manajemen Aset Barang Milik Daerah Terintegrasi untuk BPBD Kabupaten Sidoarjo.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

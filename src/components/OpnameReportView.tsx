@@ -7,7 +7,9 @@ import {
   FileSpreadsheet,
   Plus,
   Printer,
+  RotateCcw,
   Wrench,
+  XCircle,
 } from 'lucide-react';
 import { BAST_INVENTARIS_META, TIM_INVENTARIS_2026 } from '../data/initialData';
 import {
@@ -41,12 +43,14 @@ interface OpnameReportViewProps {
     estimatedAction: string;
   }) => void;
   onUpdateDamageStatus: (reportId: string, nextStatus: DamageReportStatus) => void;
+  onCancelDamageReport?: (reportId: string) => void;
   onUpdateOpnameCheck: (
     assetId: string,
     status: OpnameStatus,
     observedCondition: ConditionStatus,
     notes: string
   ) => void;
+  onRequestMaintenanceForAsset?: (assetId: string) => void;
 }
 
 export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
@@ -57,7 +61,9 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
   preselectedDamageAssetId = '',
   onCreateDamageReport,
   onUpdateDamageStatus,
+  onCancelDamageReport,
   onUpdateOpnameCheck,
+  onRequestMaintenanceForAsset,
 }) => {
   const [activeTab, setActiveTab] = useState<'kerusakan' | 'opname'>(
     preselectedDamageAssetId ? 'kerusakan' : 'kerusakan'
@@ -74,9 +80,11 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
   const [chronology, setChronology] = useState<string>('');
   const [estimatedAction, setEstimatedAction] = useState<string>('');
 
+  const lockedLocationId = roleProfile.assignedLocationId || '';
   const [opnameLocFilter, setOpnameLocFilter] = useState<string>(
-    roleProfile.assignedLocationId || 'ALL'
+    lockedLocationId || 'ALL'
   );
+  const effectiveOpnameLocFilter = lockedLocationId || opnameLocFilter;
 
   const assetMap = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
   const locationMap = useMemo(
@@ -85,9 +93,9 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
   );
 
   const opnameAssets = useMemo(() => {
-    if (opnameLocFilter === 'ALL') return assets;
-    return assets.filter((a) => a.locationId === opnameLocFilter);
-  }, [assets, opnameLocFilter]);
+    if (effectiveOpnameLocFilter === 'ALL') return assets;
+    return assets.filter((a) => a.locationId === effectiveOpnameLocFilter);
+  }, [assets, effectiveOpnameLocFilter]);
 
   const opnameStats = useMemo(() => {
     const total = opnameAssets.length;
@@ -334,37 +342,94 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4 align-top text-right whitespace-nowrap">
-                          {roleProfile.permissions.canResolveDamage &&
-                          d.status !== 'SELESAI_DIPERBAIKI' ? (
-                            <div className="inline-flex items-center gap-1.5">
-                              {d.status === 'BARU_DILAPORKAN' && (
+                          <div className="inline-flex flex-col items-end gap-1.5">
+                            {roleProfile.permissions.canResolveDamage &&
+                            d.status !== 'SELESAI_DIPERBAIKI' ? (
+                              <div className="inline-flex flex-wrap justify-end items-center gap-1.5">
+                                {d.status === 'BARU_DILAPORKAN' && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onUpdateDamageStatus(d.id, 'DALAM_PENANGANAN')
+                                    }
+                                    className="px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded cursor-pointer"
+                                  >
+                                    Proses Teknisi
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    onUpdateDamageStatus(d.id, 'DALAM_PENANGANAN')
+                                    onUpdateDamageStatus(d.id, 'SELESAI_DIPERBAIKI')
                                   }
-                                  className="px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded cursor-pointer"
+                                  className="px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded cursor-pointer"
                                 >
-                                  Proses Teknisi
+                                  Selesai &amp; Pulihkan Baik
                                 </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onUpdateDamageStatus(d.id, 'SELESAI_DIPERBAIKI')
-                                }
-                                className="px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded cursor-pointer"
-                              >
-                                Selesai & Pulihkan Baik
-                              </button>
+                                {d.status === 'DALAM_PENANGANAN' && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onUpdateDamageStatus(d.id, 'BARU_DILAPORKAN')
+                                    }
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    Batalkan
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="inline-flex flex-wrap justify-end items-center gap-2">
+                                <span className="text-[11px] text-slate-400">
+                                  {d.status === 'SELESAI_DIPERBAIKI'
+                                    ? `Selesai ${formatDateID(d.resolvedDate ?? '')}`
+                                    : 'Menunggu Pengurus/Kasubag'}
+                                </span>
+                                {d.status === 'SELESAI_DIPERBAIKI' &&
+                                  roleProfile.permissions.canResolveDamage && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onUpdateDamageStatus(d.id, 'BARU_DILAPORKAN')
+                                      }
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded cursor-pointer"
+                                    >
+                                      <RotateCcw className="w-3 h-3" />
+                                      Batalkan
+                                    </button>
+                                  )}
+                              </div>
+                            )}
+
+                            <div className="inline-flex flex-wrap justify-end items-center gap-1.5">
+                              {onRequestMaintenanceForAsset &&
+                                d.status !== 'SELESAI_DIPERBAIKI' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRequestMaintenanceForAsset(d.assetId)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded cursor-pointer"
+                                  >
+                                    <Wrench className="w-3 h-3" />
+                                    Ajukan Pemeliharaan (Nota Dinas)
+                                  </button>
+                                )}
+                              {d.status === 'BARU_DILAPORKAN' &&
+                                onCancelDamageReport &&
+                                (roleProfile.permissions.canReportDamage ||
+                                  roleProfile.permissions.canResolveDamage ||
+                                  roleProfile.permissions.canDeleteAsset) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onCancelDamageReport(d.id)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded cursor-pointer"
+                                  >
+                                    <XCircle className="w-3 h-3" />
+                                    Batalkan Laporan
+                                  </button>
+                                )}
                             </div>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">
-                              {d.status === 'SELESAI_DIPERBAIKI'
-                                ? `Selesai ${formatDateID(d.resolvedDate ?? '')}`
-                                : 'Menunggu Pengurus/Kasubag'}
-                            </span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -403,12 +468,15 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
 
               <div className="flex flex-wrap items-center gap-2 shrink-0 no-print">
                 <select
-                  value={opnameLocFilter}
+                  value={effectiveOpnameLocFilter}
+                  disabled={Boolean(lockedLocationId)}
                   onChange={(e) => setOpnameLocFilter(e.target.value)}
                   aria-label="Filter pos untuk opname"
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-md bg-white"
+                  className="px-3 py-2 text-xs border border-slate-300 rounded-md bg-white disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
                 >
-                  <option value="ALL">Semua Lokasi ({assets.length})</option>
+                  {!lockedLocationId && (
+                    <option value="ALL">Semua Lokasi ({assets.length})</option>
+                  )}
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.code} · {l.name}

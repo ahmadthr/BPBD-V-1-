@@ -20,10 +20,12 @@ import {
 import {
   ConditionStatus,
   LocationUnit,
+  ManagedUserAccount,
   RoleProfile,
   RoomAssetEntry,
   RoomUnit,
 } from '../types/simas';
+import { resolvePosAdminForLocation } from '../utils/posAdminHelper';
 import {
   KIR_FIELD_ALIASES,
   KIR_FIELD_DEFINITIONS,
@@ -55,6 +57,7 @@ interface KirRoomCardViewProps {
   roomItems: RoomAssetEntry[];
   locations: LocationUnit[];
   roleProfile: RoleProfile;
+  posAdmins?: ManagedUserAccount[];
   onAddRoom: (room: Omit<RoomUnit, 'id'>) => void;
   onAddRoomItem: (item: Omit<RoomAssetEntry, 'id'>) => void;
   onUpdateRoomItem?: (item: RoomAssetEntry) => void;
@@ -224,6 +227,7 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   roomItems,
   locations,
   roleProfile,
+  posAdmins = [],
   onAddRoom,
   onAddRoomItem,
   onUpdateRoomItem,
@@ -231,13 +235,27 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   onDeleteRoomItem,
   onOpenRoomPublicView,
 }) => {
+  const lockedLocationId = roleProfile.assignedLocationId || '';
   const [selectedRoomId, setSelectedRoomId] = useState<string>(() => {
-    if (roleProfile.assignedLocationId) {
-      const posRoom = rooms.find((r) => r.locationId === roleProfile.assignedLocationId);
+    if (lockedLocationId) {
+      const posRoom = rooms.find((r) => r.locationId === lockedLocationId);
       if (posRoom) return posRoom.id;
     }
     return rooms[0]?.id ?? '';
   });
+
+  useEffect(() => {
+    if (rooms.length === 0) {
+      setSelectedRoomId('');
+      return;
+    }
+    if (!rooms.some((r) => r.id === selectedRoomId)) {
+      const preferred = lockedLocationId
+        ? rooms.find((r) => r.locationId === lockedLocationId)
+        : rooms[0];
+      setSelectedRoomId((preferred ?? rooms[0]).id);
+    }
+  }, [rooms, selectedRoomId, lockedLocationId]);
   const [logoFailed, setLogoFailed] = useState(false);
   const [busyPrint, setBusyPrint] = useState(false);
   const [printScope, setPrintScope] = useState<'current' | 'all'>('current');
@@ -283,16 +301,24 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
     };
   }, [rooms]);
 
+  const buildDefaultRoomForm = (locId: string) => {
+    const admin = resolvePosAdminForLocation(locId, posAdmins, locations, roleProfile);
+    const loc = locations.find((l) => l.id === locId);
+    return {
+      kodeRuang: `12.15.04.01.${String(rooms.length + 1).padStart(2, '0')}`,
+      namaRuang: '',
+      locationId: locId,
+      penanggungJawab: admin?.name ?? '',
+      nipPenanggungJawab: admin?.nip && admin.nip !== '-' ? admin.nip : '',
+      jabatanPenanggungJawab: admin?.jabatan ?? '',
+      lantaiGedung: loc ? `${loc.name} · Lt. 1` : 'Gedung Mako Lt. 1',
+    };
+  };
+
   const [addRoomOpen, setAddRoomOpen] = useState(false);
-  const [roomForm, setRoomForm] = useState({
-    kodeRuang: '12.15.04.01.05',
-    namaRuang: '',
-    locationId: roleProfile.assignedLocationId || locations[0]?.id || 'LOC-MAKO',
-    penanggungJawab: '',
-    nipPenanggungJawab: '',
-    jabatanPenanggungJawab: '',
-    lantaiGedung: 'Gedung Mako Lt. 1',
-  });
+  const [roomForm, setRoomForm] = useState(() =>
+    buildDefaultRoomForm(lockedLocationId || locations[0]?.id || 'LOC-MAKO')
+  );
 
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [editingRoomItem, setEditingRoomItem] = useState<RoomAssetEntry | null>(null);
@@ -609,17 +635,13 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomForm.namaRuang.trim() || !roomForm.penanggungJawab.trim()) return;
-    onAddRoom(roomForm);
-    setAddRoomOpen(false);
-    setRoomForm({
-      kodeRuang: `12.15.04.01.${String(rooms.length + 1).padStart(2, '0')}`,
-      namaRuang: '',
-      locationId: locations[0]?.id ?? 'LOC-MAKO',
-      penanggungJawab: '',
-      nipPenanggungJawab: '',
-      jabatanPenanggungJawab: '',
-      lantaiGedung: 'Gedung Mako Lt. 1',
+    const effectiveLocationId = lockedLocationId || roomForm.locationId;
+    onAddRoom({
+      ...roomForm,
+      locationId: effectiveLocationId,
     });
+    setAddRoomOpen(false);
+    setRoomForm(buildDefaultRoomForm(lockedLocationId || locations[0]?.id || 'LOC-MAKO'));
   };
 
   const handleCreateItem = (e: React.FormEvent) => {
@@ -690,24 +712,28 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                 <FileText className="w-3.5 h-3.5" />
                 Unduh PDF KIR
               </button>
-              <button
-                type="button"
-                disabled={busyPrint}
-                onClick={handlePrintAllKir}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Cetak Semua ({rooms.length} Ruang)
-              </button>
-              <button
-                type="button"
-                disabled={busyPrint}
-                onClick={() => void handleDownloadAllPdf()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                PDF Semua ({rooms.length})
-              </button>
+              {rooms.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    disabled={busyPrint}
+                    onClick={handlePrintAllKir}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Cetak Semua ({rooms.length} Ruang)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyPrint}
+                    onClick={() => void handleDownloadAllPdf()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    PDF Semua ({rooms.length})
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 disabled={busyPrint}
@@ -842,7 +868,15 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
             {canModifyKir && (
               <button
                 type="button"
-                onClick={() => setAddRoomOpen(true)}
+                onClick={() => {
+                  const defaultLoc =
+                    lockedLocationId ||
+                    selectedRoom?.locationId ||
+                    locations[0]?.id ||
+                    'LOC-MAKO';
+                  setRoomForm(buildDefaultRoomForm(defaultLoc));
+                  setAddRoomOpen(true);
+                }}
                 className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#0B2545] border border-slate-300 hover:bg-slate-50 rounded cursor-pointer"
               >
                 <Plus className="w-3 h-3" />
@@ -1005,40 +1039,44 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                   </span>
                   )
                 </div>
-                {canModifyKir && (
+                {(canModifyKir || roleProfile.id === 'SUPER_ADMIN') && (
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setImportModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded cursor-pointer"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      Import Excel ke Ruangan
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingRoomItem(null);
-                        setItemForm({
-                          namaBarang: '',
-                          merkModel: '',
-                          tahunPerolehan: 2026,
-                          kodeBarang: '1.3.2.05.01.001',
-                          nomorRegister: '0001',
-                          jumlah: 1,
-                          satuan: 'Unit',
-                          kondisi: 'BAIK',
-                          keterangan: '',
-                          fotoDataUrl: undefined,
-                          fotoNamaFile: undefined,
-                        });
-                        setAddItemOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Tambah Barang ke Ruangan
-                    </button>
+                    {roleProfile.id === 'SUPER_ADMIN' && (
+                      <button
+                        type="button"
+                        onClick={() => setImportModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        Import Excel ke Ruangan
+                      </button>
+                    )}
+                    {canModifyKir && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingRoomItem(null);
+                          setItemForm({
+                            namaBarang: '',
+                            merkModel: '',
+                            tahunPerolehan: 2026,
+                            kodeBarang: '1.3.2.05.01.001',
+                            nomorRegister: '0001',
+                            jumlah: 1,
+                            satuan: 'Unit',
+                            kondisi: 'BAIK',
+                            keterangan: '',
+                            fotoDataUrl: undefined,
+                            fotoNamaFile: undefined,
+                          });
+                          setAddItemOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Tambah Barang ke Ruangan
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1263,11 +1301,31 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                     Lokasi Pos / Mako *
                   </label>
                   <select
-                    value={roomForm.locationId}
-                    onChange={(e) =>
-                      setRoomForm({ ...roomForm, locationId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                    value={lockedLocationId || roomForm.locationId}
+                    disabled={Boolean(lockedLocationId)}
+                    onChange={(e) => {
+                      const nextLoc = e.target.value;
+                      const admin = resolvePosAdminForLocation(
+                        nextLoc,
+                        posAdmins,
+                        locations,
+                        roleProfile
+                      );
+                      const loc = locations.find((l) => l.id === nextLoc);
+                      setRoomForm({
+                        ...roomForm,
+                        locationId: nextLoc,
+                        penanggungJawab: admin?.name ?? roomForm.penanggungJawab,
+                        nipPenanggungJawab:
+                          admin?.nip && admin.nip !== '-' ? admin.nip : '',
+                        jabatanPenanggungJawab:
+                          admin?.jabatan ?? roomForm.jabatanPenanggungJawab,
+                        lantaiGedung: loc
+                          ? `${loc.name} · Lt. 1`
+                          : roomForm.lantaiGedung,
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md disabled:bg-slate-100 disabled:text-slate-700"
                   >
                     {locations.map((l) => (
                       <option key={l.id} value={l.id}>
@@ -1572,8 +1630,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
         </div>
       )}
 
-      {/* Excel Import Modal for Active KIR Room */}
-      {selectedRoom && (
+      {/* Excel Import Modal for Active KIR Room (Super Admin Only) */}
+      {roleProfile.id === 'SUPER_ADMIN' && selectedRoom && (
         <ExcelImportModal
           isOpen={importModalOpen}
           onClose={() => setImportModalOpen(false)}

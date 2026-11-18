@@ -22,6 +22,7 @@ type ModuleKey =
   | 'qr_scanner'
   | 'mutasi'
   | 'opname_laporan'
+  | 'pengajuan_pemeliharaan'
   | 'rbac_audit';
 
 interface RolePermissions {
@@ -212,6 +213,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       'qr_scanner',
       'mutasi',
       'opname_laporan',
+      'pengajuan_pemeliharaan',
       'rbac_audit',
     ],
   },
@@ -243,6 +245,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       'qr_scanner',
       'mutasi',
       'opname_laporan',
+      'pengajuan_pemeliharaan',
       'rbac_audit',
     ],
   },
@@ -274,6 +277,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       'qr_scanner',
       'mutasi',
       'opname_laporan',
+      'pengajuan_pemeliharaan',
       'rbac_audit',
     ],
   },
@@ -297,7 +301,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       canViewAuditLogs: false,
       canManageRbacUsers: false,
     },
-    allowedModules: ['dashboard', 'kib', 'kendaraan', 'kir', 'qr_scanner', 'mutasi', 'opname_laporan'],
+    allowedModules: ['dashboard', 'kib', 'kendaraan', 'kir', 'qr_scanner', 'mutasi', 'opname_laporan', 'pengajuan_pemeliharaan'],
   },
   PIMPINAN_VIEWER: {
     id: 'PIMPINAN_VIEWER',
@@ -319,7 +323,7 @@ const ROLE_CONFIGS: Record<RoleId, RoleConfig> = {
       canViewAuditLogs: false,
       canManageRbacUsers: false,
     },
-    allowedModules: ['dashboard', 'kib', 'kendaraan', 'kir', 'mutasi', 'opname_laporan'],
+    allowedModules: ['dashboard', 'kib', 'kendaraan', 'kir', 'mutasi', 'opname_laporan', 'pengajuan_pemeliharaan'],
   },
 };
 

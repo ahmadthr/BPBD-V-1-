@@ -197,6 +197,16 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
   const isFound = isRoomMode
     ? Boolean(matchedRoom)
     : Boolean(matchedAsset || matchedVehicle);
+  const resolvedResourceLocationId = isRoomMode
+    ? matchedRoom?.locationId ?? ''
+    : matchedVehicle?.locationId ?? matchedAsset?.locationId ?? '';
+  const isRestrictedByPos = Boolean(
+    session &&
+      roleProfile.assignedLocationId &&
+      isFound &&
+      resolvedResourceLocationId &&
+      resolvedResourceLocationId !== roleProfile.assignedLocationId
+  );
   const displayKode =
     matchedVehicle?.kodeBarang ?? matchedAsset?.kodeBarang ?? kodeParam;
   const displayRegister =
@@ -290,7 +300,12 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 text-xs shrink-0">
-            {isFound ? (
+            {isRestrictedByPos ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-amber-300">
+                <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                Akses Dibatasi Lokasi Pos
+              </span>
+            ) : isFound ? (
               <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-300">
                 <ShieldCheck className="w-4 h-4 shrink-0" aria-hidden="true" />
                 {isRoomMode
@@ -315,7 +330,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
             Endpoint: {dynamicRouteUrl}
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {isFound && (
+            {isFound && !isRestrictedByPos && (
               <button
                 type="button"
                 onClick={() => void handleCopyProfileUrl()}
@@ -343,7 +358,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
               Kembali ke Dashboard
             </button>
 
-            {isFound && (
+            {isFound && !isRestrictedByPos && (
               <button
                 type="button"
                 onClick={() =>
@@ -380,7 +395,39 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
           </div>
         </div>
 
-        {!isFound ? (
+        {isRestrictedByPos ? (
+          <div className="bg-white border border-amber-200 rounded-lg p-8 text-center space-y-4">
+            <AlertTriangle className="w-10 h-10 text-amber-600 mx-auto" />
+            <div className="space-y-1.5">
+              <h2 className="font-display text-lg font-bold text-slate-900">
+                Akses Inventaris Dibatasi Sesuai Lokasi Pos
+              </h2>
+              <p className="text-xs text-slate-600 max-w-lg mx-auto leading-relaxed">
+                Akun Anda ({roleProfile.officerName}) terdaftar sebagai Admin/Penanggung Jawab{' '}
+                <strong>
+                  {locationMap.get(roleProfile.assignedLocationId ?? '')?.name ??
+                    roleProfile.unitName}
+                </strong>
+                . Barang atau ruangan ini tercatat di lokasi{' '}
+                <strong>
+                  {locationMap.get(resolvedResourceLocationId)?.name ??
+                    resolvedResourceLocationId}
+                </strong>{' '}
+                sehingga tidak dapat dibuka menggunakan akun pos Anda.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={onBackToDashboard}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Kembali ke Inventaris Pos Anda
+              </button>
+            </div>
+          </div>
+        ) : !isFound ? (
           <div className="bg-white border border-slate-200 rounded-lg p-8 text-center space-y-4">
             <AlertTriangle className="w-10 h-10 text-amber-600 mx-auto" />
             <div className="space-y-1">

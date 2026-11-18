@@ -105,11 +105,10 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
   onQuickNavigateToDamage,
   onOpenPublicProfile,
 }) => {
+  const lockedLocationId = roleProfile.assignedLocationId || '';
   const [kibFilter, setKibFilter] = useState<KibCategory | 'ALL'>(initialKibFilter);
   const [locationFilter, setLocationFilter] = useState<string>(
-    initialLocationFilter !== 'ALL'
-      ? initialLocationFilter
-      : roleProfile.assignedLocationId || 'ALL'
+    lockedLocationId || (initialLocationFilter !== 'ALL' ? initialLocationFilter : 'ALL')
   );
   const [conditionFilter, setConditionFilter] = useState<ConditionStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -130,11 +129,13 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
     [locations]
   );
 
+  const effectiveLocationFilter = lockedLocationId || locationFilter;
+
   const filteredAssets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return assets.filter((a) => {
       if (kibFilter !== 'ALL' && a.kibType !== kibFilter) return false;
-      if (locationFilter !== 'ALL' && a.locationId !== locationFilter) return false;
+      if (effectiveLocationFilter !== 'ALL' && a.locationId !== effectiveLocationFilter) return false;
       if (conditionFilter !== 'ALL' && a.kondisi !== conditionFilter) return false;
       if (!q) return true;
       const locName = locationMap.get(a.locationId)?.name.toLowerCase() ?? '';
@@ -148,7 +149,7 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
         locName.includes(q)
       );
     });
-  }, [assets, kibFilter, locationFilter, conditionFilter, searchQuery, locationMap]);
+  }, [assets, kibFilter, effectiveLocationFilter, conditionFilter, searchQuery, locationMap]);
 
   const filteredTotalValue = useMemo(
     () => filteredAssets.reduce((sum, a) => sum + a.nilaiPerolehan, 0),
@@ -280,25 +281,25 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
               </button>
             </>
           )}
+          {roleProfile.id === 'SUPER_ADMIN' && (
+            <button
+              type="button"
+              onClick={() => setImportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Import Excel
+            </button>
+          )}
           {roleProfile.permissions.canCreateAsset && (
-            <>
-              <button
-                type="button"
-                onClick={() => setImportModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                Import Excel
-              </button>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Input Perolehan Aset
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Input Perolehan Aset
+            </button>
           )}
         </div>
       </div>
@@ -346,12 +347,15 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
 
         <div className="md:col-span-4">
           <select
-            value={locationFilter}
+            value={effectiveLocationFilter}
+            disabled={Boolean(lockedLocationId)}
             onChange={(e) => setLocationFilter(e.target.value)}
             aria-label="Filter lokasi penempatan"
-            className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0B2545] cursor-pointer"
+            className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0B2545] cursor-pointer disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
           >
-            <option value="ALL">Semua Lokasi (Mako & 7 Pos Damkar)</option>
+            {!lockedLocationId && (
+              <option value="ALL">Semua Lokasi (Mako &amp; 7 Pos Damkar)</option>
+            )}
             {locations.map((loc) => (
               <option key={loc.id} value={loc.id}>
                 {loc.code} · {loc.name}
@@ -401,7 +405,7 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
               type="button"
               onClick={() => {
                 setKibFilter('ALL');
-                setLocationFilter('ALL');
+                setLocationFilter(lockedLocationId || 'ALL');
                 setConditionFilter('ALL');
                 setSearchQuery('');
               }}
@@ -1032,55 +1036,57 @@ export const KibManagementView: React.FC<KibManagementViewProps> = ({
         </div>
       )}
 
-      {/* Excel Import Modal for External BMD Apps */}
-      <ExcelImportModal
-        isOpen={importModalOpen}
-        onClose={() => setImportModalOpen(false)}
-        title="Import Excel Master KIB (Support SIMBADA / e-BMD / SIPD / CSV)"
-        subtitle="Unggah file .xlsx, .xls, atau .csv dari aplikasi pengelola aset lain dan petakan kolom ke Master KIB SIMAS-BMD"
-        fieldDefinitions={KIB_FIELD_DEFINITIONS}
-        fieldAliases={KIB_FIELD_ALIASES}
-        onDownloadTemplate={downloadKibExcelTemplate}
-        extraOptions={
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-slate-800">
-                Lokasi Default Jika Kolom Lokasi Tidak Ada di Excel
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Baris yang sudah mencantumkan nama Pos / Mako di Excel akan otomatis dicocokkan ke lokasi masing-masing.
-              </p>
+      {/* Excel Import Modal for External BMD Apps (Super Admin Only) */}
+      {roleProfile.id === 'SUPER_ADMIN' && (
+        <ExcelImportModal
+          isOpen={importModalOpen}
+          onClose={() => setImportModalOpen(false)}
+          title="Import Excel Master KIB (Support SIMBADA / e-BMD / SIPD / CSV)"
+          subtitle="Unggah file .xlsx, .xls, atau .csv dari aplikasi pengelola aset lain dan petakan kolom ke Master KIB SIMAS-BMD"
+          fieldDefinitions={KIB_FIELD_DEFINITIONS}
+          fieldAliases={KIB_FIELD_ALIASES}
+          onDownloadTemplate={downloadKibExcelTemplate}
+          extraOptions={
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-800">
+                  Lokasi Default Jika Kolom Lokasi Tidak Ada di Excel
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Baris yang sudah mencantumkan nama Pos / Mako di Excel akan otomatis dicocokkan ke lokasi masing-masing.
+                </p>
+              </div>
+              <select
+                value={importDefaultLoc}
+                onChange={(e) => setImportDefaultLoc(e.target.value)}
+                className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium"
+              >
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.code} · {l.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={importDefaultLoc}
-              onChange={(e) => setImportDefaultLoc(e.target.value)}
-              className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium"
-            >
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.code} · {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
-        onConfirmImport={(rows, mapping) => {
-          const parsed = mapRowsToKibAssets(
-            rows,
-            mapping,
-            locations,
-            importDefaultLoc,
-            roleProfile.officerName
-          );
-          if (parsed.length > 0) {
-            onImportAssets?.(parsed);
           }
-          return {
-            importedCount: parsed.length,
-            message: `${parsed.length} register barang berhasil diimpor ke Master KIB A–F.`,
-          };
-        }}
-      />
+          onConfirmImport={(rows, mapping) => {
+            const parsed = mapRowsToKibAssets(
+              rows,
+              mapping,
+              locations,
+              importDefaultLoc,
+              roleProfile.officerName
+            );
+            if (parsed.length > 0) {
+              onImportAssets?.(parsed);
+            }
+            return {
+              importedCount: parsed.length,
+              message: `${parsed.length} register barang berhasil diimpor ke Master KIB A–F.`,
+            };
+          }}
+        />
+      )}
 
       <PhotoLightboxModal
         photo={lightboxPhoto}

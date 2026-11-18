@@ -26,6 +26,7 @@ import {
   BpkbStatus,
   ConditionStatus,
   LocationUnit,
+  MaintenanceRequest,
   MaintenanceType,
   RoleProfile,
   TaxStatus,
@@ -53,6 +54,7 @@ import { ConditionIndicator } from './StatusText';
 interface VehicleInventoryViewProps {
   vehicles: VehicleItem[];
   maintenances: VehicleMaintenanceRecord[];
+  maintenanceRequests?: MaintenanceRequest[];
   locations: LocationUnit[];
   roleProfile: RoleProfile;
   onAddVehicle: (vehicle: Omit<VehicleItem, 'id'>) => void;
@@ -60,7 +62,8 @@ interface VehicleInventoryViewProps {
   onUpdateVehicle: (vehicle: VehicleItem) => void;
   onDeleteVehicle: (vehicleId: string) => void;
   onAddMaintenance: (
-    record: Omit<VehicleMaintenanceRecord, 'id' | 'dicatatOleh'>
+    record: Omit<VehicleMaintenanceRecord, 'id' | 'dicatatOleh'>,
+    nextCondition?: ConditionStatus
   ) => void;
 }
 
@@ -133,6 +136,7 @@ const EMPTY_VEHICLE_FORM: Omit<VehicleItem, 'id'> = {
 const EMPTY_MAINTENANCE_FORM = {
   tanggalPerbaikan: new Date().toISOString().slice(0, 10),
   jenisPenanganan: 'PEMELIHARAAN_RUTIN' as MaintenanceType,
+  nextCondition: '' as '' | ConditionStatus,
   deskripsiKerusakan: '',
   tindakanPerbaikan: '',
   bengkelPelaksana: '',
@@ -233,6 +237,7 @@ function exportVehiclesToCSV(
 export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   vehicles,
   maintenances,
+  maintenanceRequests = [],
   locations,
   roleProfile,
   onAddVehicle,
@@ -241,9 +246,10 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   onDeleteVehicle,
   onAddMaintenance,
 }) => {
+  const lockedLocationId = roleProfile.assignedLocationId || '';
   const [categoryFilter, setCategoryFilter] = useState<VehicleCategory | 'ALL'>('ALL');
   const [locationFilter, setLocationFilter] = useState<string>(
-    roleProfile.assignedLocationId || 'ALL'
+    lockedLocationId || 'ALL'
   );
   const [taxFilter, setTaxFilter] = useState<TaxStatus | 'ALL' | 'EXPIRED_OR_SOON'>('ALL');
   const [bpkbFilter, setBpkbFilter] = useState<BpkbStatus | 'ALL'>('ALL');
@@ -276,9 +282,38 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
     [locations]
   );
 
+  const activeMaintenanceByVehicle = useMemo(() => {
+    const map = new Map<string, MaintenanceRequest>();
+    const vehByPlate = new Map(
+      vehicles.map((v) => [v.nomorPolisi.trim().toUpperCase(), v.id])
+    );
+    maintenanceRequests.forEach((req) => {
+      if (
+        req.status !== 'MENUNGGU_VERIFIKASI_KASUBAG' &&
+        req.status !== 'DISETUJUI_KASUBAG'
+      ) {
+        return;
+      }
+      const vehId =
+        req.vehicleId ??
+        (req.kategori === 'KENDARAAN'
+          ? vehByPlate.get(req.nomorPolisiOrIdentitas.trim().toUpperCase())
+          : undefined);
+      if (vehId && !map.has(vehId)) {
+        map.set(vehId, req);
+      }
+    });
+    return map;
+  }, [vehicles, maintenanceRequests]);
+
   const detailVehicle = useMemo(
     () => vehicles.find((v) => v.id === detailVehicleId) ?? null,
     [vehicles, detailVehicleId]
+  );
+
+  const detailActiveMaintenance = useMemo(
+    () => (detailVehicleId ? activeMaintenanceByVehicle.get(detailVehicleId) ?? null : null),
+    [activeMaintenanceByVehicle, detailVehicleId]
   );
 
   const detailMaintenances = useMemo(
@@ -291,11 +326,13 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
     [maintenances, detailVehicleId]
   );
 
+  const effectiveLocationFilter = lockedLocationId || locationFilter;
+
   const filteredVehicles = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return vehicles.filter((v) => {
       if (categoryFilter !== 'ALL' && v.kategori !== categoryFilter) return false;
-      if (locationFilter !== 'ALL' && v.locationId !== locationFilter) return false;
+      if (effectiveLocationFilter !== 'ALL' && v.locationId !== effectiveLocationFilter) return false;
       if (taxFilter === 'EXPIRED_OR_SOON') {
         const exp = getTaxExpiryInfo(v.pajakBerlakuSampai);
         if (
@@ -328,7 +365,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   }, [
     vehicles,
     categoryFilter,
-    locationFilter,
+    effectiveLocationFilter,
     taxFilter,
     bpkbFilter,
     sourceFilter,
@@ -435,18 +472,22 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
   const handleSaveMaintenance = (e: React.FormEvent) => {
     e.preventDefault();
     if (!detailVehicleId || !maintenanceForm.deskripsiKerusakan.trim()) return;
-    onAddMaintenance({
-      vehicleId: detailVehicleId,
-      tanggalPerbaikan: maintenanceForm.tanggalPerbaikan,
-      jenisPenanganan: maintenanceForm.jenisPenanganan,
-      deskripsiKerusakan: maintenanceForm.deskripsiKerusakan.trim(),
-      tindakanPerbaikan: maintenanceForm.tindakanPerbaikan.trim(),
-      bengkelPelaksana: maintenanceForm.bengkelPelaksana.trim() || 'Bengkel Rekanan Pemda',
-      biaya: Number(maintenanceForm.biaya) || 0,
-      buktiNamaFile: maintenanceForm.buktiNamaFile || undefined,
-      buktiMimeType: maintenanceForm.buktiMimeType || undefined,
-      buktiDataUrl: maintenanceForm.buktiDataUrl || undefined,
-    });
+    onAddMaintenance(
+      {
+        vehicleId: detailVehicleId,
+        tanggalPerbaikan: maintenanceForm.tanggalPerbaikan,
+        jenisPenanganan: maintenanceForm.jenisPenanganan,
+        deskripsiKerusakan: maintenanceForm.deskripsiKerusakan.trim(),
+        tindakanPerbaikan: maintenanceForm.tindakanPerbaikan.trim(),
+        bengkelPelaksana:
+          maintenanceForm.bengkelPelaksana.trim() || 'Bengkel Rekanan Pemda',
+        biaya: Number(maintenanceForm.biaya) || 0,
+        buktiNamaFile: maintenanceForm.buktiNamaFile || undefined,
+        buktiMimeType: maintenanceForm.buktiMimeType || undefined,
+        buktiDataUrl: maintenanceForm.buktiDataUrl || undefined,
+      },
+      maintenanceForm.nextCondition || undefined
+    );
     setMaintenanceForm(EMPTY_MAINTENANCE_FORM);
     setUploadError('');
     setMaintenanceFormOpen(false);
@@ -493,34 +534,39 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                       'Penanggung Jawab',
                       'Sumber Perolehan',
                       'Nilai Perolehan',
+                      'Riwayat Service',
                       'Kondisi',
                       'Keterangan',
                     ],
-                    filteredVehicles.map((v) => [
-                      v.id,
-                      v.kategori === 'RODA_4' ? 'Roda 4' : 'Roda 2',
-                      v.kodeBarang,
-                      v.nomorRegister,
-                      v.namaKendaraan,
-                      v.merkTipe,
-                      v.tahunPerolehan,
-                      v.warna,
-                      v.nomorPolisi,
-                      v.nomorRangka,
-                      v.nomorMesin,
-                      v.statusPajak === 'LUNAS_AKTIF' ? 'Lunas/Aktif' : 'Belum Bayar',
-                      v.pajakBerlakuSampai,
-                      v.statusBpkb === 'SUDAH_KELUAR'
-                        ? 'BPKB Sudah Keluar'
-                        : 'BPKB Belum Keluar / Masih Proses',
-                      v.nomorBpkb ?? '',
-                      locationMap.get(v.locationId)?.name ?? v.locationId,
-                      v.penanggungJawab,
-                      v.sumberPerolehan,
-                      v.nilaiPerolehan,
-                      v.kondisi,
-                      v.keterangan ?? '',
-                    ]),
+                    filteredVehicles.map((v) => {
+                      const svcCount = maintenances.filter((m) => m.vehicleId === v.id).length;
+                      return [
+                        v.id,
+                        v.kategori === 'RODA_4' ? 'Roda 4' : 'Roda 2',
+                        v.kodeBarang,
+                        v.nomorRegister,
+                        v.namaKendaraan,
+                        v.merkTipe,
+                        v.tahunPerolehan,
+                        v.warna,
+                        v.nomorPolisi,
+                        v.nomorRangka,
+                        v.nomorMesin,
+                        v.statusPajak === 'LUNAS_AKTIF' ? 'Lunas/Aktif' : 'Belum Bayar',
+                        v.pajakBerlakuSampai,
+                        v.statusBpkb === 'SUDAH_KELUAR'
+                          ? 'BPKB Sudah Keluar'
+                          : 'BPKB Belum Keluar / Masih Proses',
+                        v.nomorBpkb ?? '',
+                        locationMap.get(v.locationId)?.name ?? v.locationId,
+                        v.penanggungJawab,
+                        v.sumberPerolehan,
+                        v.nilaiPerolehan,
+                        `${svcCount} kali service`,
+                        v.kondisi,
+                        v.keterangan ?? '',
+                      ];
+                    }),
                     'inventaris-kendaraan-bpbd-sidoarjo.xlsx'
                   )
                 }
@@ -547,25 +593,25 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
               </button>
             </>
           )}
+          {roleProfile.id === 'SUPER_ADMIN' && (
+            <button
+              type="button"
+              onClick={() => setImportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Import Excel
+            </button>
+          )}
           {roleProfile.permissions.canCreateAsset && (
-            <>
-              <button
-                type="button"
-                onClick={() => setImportModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0B2545] bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                Import Excel
-              </button>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Tambah Kendaraan
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Tambah Kendaraan
+            </button>
           )}
         </div>
       </div>
@@ -672,12 +718,15 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
 
         <div className="md:col-span-3">
           <select
-            value={locationFilter}
+            value={effectiveLocationFilter}
+            disabled={Boolean(lockedLocationId)}
             onChange={(e) => setLocationFilter(e.target.value)}
             aria-label="Filter pos penempatan"
-            className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:border-[#0B2545]"
+            className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:border-[#0B2545] disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
           >
-            <option value="ALL">Semua Lokasi (Mako &amp; 7 Pos Damkar)</option>
+            {!lockedLocationId && (
+              <option value="ALL">Semua Lokasi (Mako &amp; 7 Pos Damkar)</option>
+            )}
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
@@ -746,7 +795,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                 <th className="py-3 px-4">Status Pajak &amp; BPKB</th>
                 <th className="py-3 px-4">Sumber &amp; Detail Hibah</th>
                 <th className="py-3 px-4">Pos Penempatan &amp; Pemegang</th>
-                <th className="py-3 px-4">Kondisi</th>
+                <th className="py-3 px-4">Riwayat Service</th>
                 <th className="py-3 px-4 text-right no-print">Aksi</th>
               </tr>
             </thead>
@@ -760,9 +809,17 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
               ) : (
                 filteredVehicles.map((v) => {
                   const loc = locationMap.get(v.locationId);
-                  const mntCount = maintenances.filter(
-                    (m) => m.vehicleId === v.id
-                  ).length;
+                  const vehicleServices = maintenances
+                    .filter((m) => m.vehicleId === v.id)
+                    .sort((a, b) =>
+                      b.tanggalPerbaikan.localeCompare(a.tanggalPerbaikan)
+                    );
+                  const mntCount = vehicleServices.length;
+                  const latestService = vehicleServices[0];
+                  const totalServiceCost = vehicleServices.reduce(
+                    (sum, m) => sum + m.biaya,
+                    0
+                  );
 
                   return (
                     <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
@@ -898,11 +955,59 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 whitespace-nowrap align-top">
-                        <ConditionIndicator condition={v.kondisi} />
-                        <div className="text-[11px] text-slate-500 mt-1 tabular-nums">
-                          {mntCount} riwayat servis
-                        </div>
+                      <td className="py-3.5 px-4 align-top">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetailVehicleId(v.id);
+                            setMaintenanceFormOpen(false);
+                            setUploadError('');
+                          }}
+                          className="inline-flex items-center gap-1.5 font-semibold text-[#0B2545] hover:underline tabular-nums cursor-pointer text-left"
+                        >
+                          <Wrench className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span>
+                            {mntCount > 0
+                              ? `${mntCount} Riwayat Service`
+                              : 'Belum Ada Service'}
+                          </span>
+                        </button>
+                        {latestService && (
+                          <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
+                            <div className="font-mono tabular-nums">
+                              Terakhir: {formatDateID(latestService.tanggalPerbaikan)}
+                            </div>
+                            <div
+                              className={`font-medium ${MAINTENANCE_TYPE_META[latestService.jenisPenanganan].textClass}`}
+                            >
+                              {MAINTENANCE_TYPE_META[latestService.jenisPenanganan].label}
+                            </div>
+                            <div className="font-mono text-slate-700 tabular-nums">
+                              Total: {formatIDR(totalServiceCost)}
+                            </div>
+                          </div>
+                        )}
+                        {(() => {
+                          const activeReq = activeMaintenanceByVehicle.get(v.id);
+                          if (!activeReq) return null;
+                          return (
+                            <div
+                              className={`mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-block ${
+                                activeReq.status === 'DISETUJUI_KASUBAG'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                              }`}
+                              title={activeReq.perihal}
+                            >
+                              Pengajuan Servis: {activeReq.nomorNotaDinas}
+                            </div>
+                          );
+                        })()}
+                        {v.kondisi !== 'BAIK' && (
+                          <div className="mt-1">
+                            <ConditionIndicator condition={v.kondisi} />
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 whitespace-nowrap text-right align-top no-print">
@@ -1612,6 +1717,18 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                       <span className="text-slate-500">Kondisi Fisik</span>
                       <ConditionIndicator condition={detailVehicle.kondisi} />
                     </div>
+                    {detailActiveMaintenance && (
+                      <div className="pt-1.5 mt-1 border-t border-amber-200 text-[11px] text-amber-800">
+                        <span className="font-semibold block">
+                          Pemeliharaan Aktif ({detailActiveMaintenance.nomorNotaDinas})
+                        </span>
+                        <span>
+                          {detailActiveMaintenance.status === 'DISETUJUI_KASUBAG'
+                            ? 'Disetujui Kasubag Umpeg'
+                            : 'Menunggu Verifikasi Kasubag Umpeg'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1789,7 +1906,7 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                     onSubmit={handleSaveMaintenance}
                     className="p-5 bg-slate-50/70 border-b border-slate-200 space-y-4 text-xs"
                   >
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div>
                         <label className="block font-semibold text-slate-700 mb-1">
                           Tanggal Perbaikan *
@@ -1824,6 +1941,26 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
                           <option value="PEMELIHARAAN_RUTIN">Pemeliharaan Rutin</option>
                           <option value="PERBAIKAN_RINGAN">Perbaikan Ringan</option>
                           <option value="PERBAIKAN_BERAT">Perbaikan Berat</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">
+                          Perbarui Kondisi Kendaraan
+                        </label>
+                        <select
+                          value={maintenanceForm.nextCondition}
+                          onChange={(e) =>
+                            setMaintenanceForm({
+                              ...maintenanceForm,
+                              nextCondition: e.target.value as '' | ConditionStatus,
+                            })
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md"
+                        >
+                          <option value="">Tetap ({detailVehicle.kondisi.replace('_', ' ')})</option>
+                          <option value="BAIK">Baik</option>
+                          <option value="RUSAK_RINGAN">Rusak Ringan</option>
+                          <option value="RUSAK_BERAT">Rusak Berat</option>
                         </select>
                       </div>
                       <div>
@@ -2098,55 +2235,57 @@ export const VehicleInventoryView: React.FC<VehicleInventoryViewProps> = ({
           </div>
         </div>
       )}
-      {/* Excel Import Modal for Vehicles */}
-      <ExcelImportModal
-        isOpen={importModalOpen}
-        onClose={() => setImportModalOpen(false)}
-        title="Import Excel Inventaris Kendaraan (R4/R2)"
-        subtitle="Impor daftar armada dinas dari file Excel/CSV aplikasi BMD lain (SIMBADA, e-BMD, Samsat/Rekap Armada)"
-        fieldDefinitions={VEHICLE_FIELD_DEFINITIONS}
-        fieldAliases={VEHICLE_FIELD_ALIASES}
-        onDownloadTemplate={downloadVehicleExcelTemplate}
-        extraOptions={
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-slate-800">
-                Pos Penempatan Default (Jika Kolom Pos Tidak Terisi)
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Nama Pos Damkar atau Mako di kolom Excel akan dicocokkan otomatis.
-              </p>
+      {/* Excel Import Modal for Vehicles (Super Admin Only) */}
+      {roleProfile.id === 'SUPER_ADMIN' && (
+        <ExcelImportModal
+          isOpen={importModalOpen}
+          onClose={() => setImportModalOpen(false)}
+          title="Import Excel Inventaris Kendaraan (R4/R2)"
+          subtitle="Impor daftar armada dinas dari file Excel/CSV aplikasi BMD lain (SIMBADA, e-BMD, Samsat/Rekap Armada)"
+          fieldDefinitions={VEHICLE_FIELD_DEFINITIONS}
+          fieldAliases={VEHICLE_FIELD_ALIASES}
+          onDownloadTemplate={downloadVehicleExcelTemplate}
+          extraOptions={
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-800">
+                  Pos Penempatan Default (Jika Kolom Pos Tidak Terisi)
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Nama Pos Damkar atau Mako di kolom Excel akan dicocokkan otomatis.
+                </p>
+              </div>
+              <select
+                value={importDefaultLoc}
+                onChange={(e) => setImportDefaultLoc(e.target.value)}
+                className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium"
+              >
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.code} · {l.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={importDefaultLoc}
-              onChange={(e) => setImportDefaultLoc(e.target.value)}
-              className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium"
-            >
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.code} · {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
-        onConfirmImport={(rows, mapping) => {
-          const parsed = mapRowsToVehicles(
-            rows,
-            mapping,
-            locations,
-            importDefaultLoc,
-            roleProfile.officerName
-          );
-          if (parsed.length > 0) {
-            onImportVehicles?.(parsed);
           }
-          return {
-            importedCount: parsed.length,
-            message: `${parsed.length} unit kendaraan berhasil diimpor ke Inventaris Kendaraan.`,
-          };
-        }}
-      />
+          onConfirmImport={(rows, mapping) => {
+            const parsed = mapRowsToVehicles(
+              rows,
+              mapping,
+              locations,
+              importDefaultLoc,
+              roleProfile.officerName
+            );
+            if (parsed.length > 0) {
+              onImportVehicles?.(parsed);
+            }
+            return {
+              importedCount: parsed.length,
+              message: `${parsed.length} unit kendaraan berhasil diimpor ke Inventaris Kendaraan.`,
+            };
+          }}
+        />
+      )}
 
       <PhotoLightboxModal
         photo={lightboxPhoto}

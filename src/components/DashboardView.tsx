@@ -110,7 +110,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Ringkasan Inventarisasi BMD · BPBD Kab. Sidoarjo
           </h2>
           <p className="text-sm text-slate-600 mt-1">
-            Pemantauan kondisi aset real-time pada Mako BPBD dan {firePostsCount} Pos Damkar / Lapangan · Peran aktif:{' '}
+            {roleProfile.assignedLocationId
+              ? `Pemantauan kondisi aset real-time khusus lokasi ${
+                  locations.find((l) => l.id === roleProfile.assignedLocationId)?.name ??
+                  roleProfile.unitName
+                }`
+              : `Pemantauan kondisi aset real-time pada Mako BPBD dan ${firePostsCount} Pos Damkar / Lapangan`}{' '}
+            · Peran aktif:{' '}
             <span className="font-semibold text-[#0B2545]">{roleProfile.label}</span>
           </p>
         </div>
@@ -154,7 +160,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </strong>
             <span className="mx-1.5 text-amber-400">·</span>
             <span>
-              Penanggung Jawab: {roleProfile.officerName}. Data KIB, Kendaraan &amp; KIR difokuskan ke pos penugasan Anda.
+              Penanggung Jawab: {roleProfile.officerName}. Anda hanya dapat membuka dan melihat daftar inventaris KIB, Kendaraan, KIR, dan Opname sesuai lokasi pos penugasan ini.
             </span>
           </div>
           <button
