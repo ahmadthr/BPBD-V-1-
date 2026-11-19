@@ -3,6 +3,7 @@ import { LogIn, LogOut, Menu } from 'lucide-react';
 import { AssetPublicProfileView } from './components/AssetPublicProfileView';
 import { DashboardView } from './components/DashboardView';
 import { KibManagementView } from './components/KibManagementView';
+import { KirPrintStandaloneView } from './components/KirPrintStandaloneView';
 import { KirRoomCardView } from './components/KirRoomCardView';
 import { LoginView } from './components/LoginView';
 import { MaintenanceRequestView } from './components/MaintenanceRequestView';
@@ -280,6 +281,39 @@ function loadStoredSession(): AuthSession | null {
   return null;
 }
 
+function parseKirPrintFromLocation(): {
+  scope: 'current' | 'all';
+  ruang: string;
+  autoprint: boolean;
+} | null {
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    let hashParams: URLSearchParams | null = null;
+    if (window.location.hash) {
+      const rawHash = window.location.hash.replace(/^#/, '');
+      const qIdx = rawHash.indexOf('?');
+      if (qIdx >= 0) {
+        hashParams = new URLSearchParams(rawHash.slice(qIdx + 1));
+      }
+    }
+
+    const printMode = searchParams.get('print') ?? hashParams?.get('print') ?? '';
+    if (printMode !== 'kir') return null;
+
+    const scopeRaw = searchParams.get('scope') ?? hashParams?.get('scope') ?? 'current';
+    const ruang = searchParams.get('ruang') ?? hashParams?.get('ruang') ?? '';
+    const autoprintRaw =
+      searchParams.get('autoprint') ?? hashParams?.get('autoprint') ?? '';
+    return {
+      scope: scopeRaw === 'all' ? 'all' : 'current',
+      ruang,
+      autoprint: autoprintRaw === '1' || autoprintRaw === 'true',
+    };
+  } catch {
+    return null;
+  }
+}
+
 function parseAssetDetailFromLocation(): {
   kode: string;
   register: string;
@@ -298,6 +332,11 @@ function parseAssetDetailFromLocation(): {
       if (qIdx >= 0) {
         hashParams = new URLSearchParams(rawHash.slice(qIdx + 1));
       }
+    }
+
+    const printMode = searchParams.get('print') ?? hashParams?.get('print') ?? '';
+    if (printMode === 'kir') {
+      return null;
     }
 
     const kode = searchParams.get('kode') ?? hashParams?.get('kode') ?? '';
@@ -325,6 +364,11 @@ export default function App() {
   const initialDomain = useMemo(() => loadInitialDomainState(), []);
   const initialSession = useMemo(() => loadStoredSession(), []);
 
+  const [kirPrintRoute, setKirPrintRoute] = useState<{
+    scope: 'current' | 'all';
+    ruang: string;
+    autoprint: boolean;
+  } | null>(() => parseKirPrintFromLocation());
   const [assetDetailRoute, setAssetDetailRoute] = useState<{
     kode: string;
     register: string;
@@ -377,9 +421,10 @@ export default function App() {
 
   const locations = INITIAL_LOCATIONS;
 
-  // Sync browser back/forward navigation with /aset/detail route
+  // Sync browser back/forward navigation with /aset/detail & ?print=kir routes
   useEffect(() => {
     const onPopState = () => {
+      setKirPrintRoute(parseKirPrintFromLocation());
       setAssetDetailRoute(parseAssetDetailFromLocation());
     };
     window.addEventListener('popstate', onPopState);
@@ -389,18 +434,25 @@ export default function App() {
   const openAssetDetailRoute = useCallback((kode: string, register: string) => {
     const { pathUrl } = buildAssetDetailUrl(kode, register);
     window.history.pushState({}, '', pathUrl);
+    setKirPrintRoute(null);
     setAssetDetailRoute({ kode, register, ruang: '' });
   }, []);
 
   const openRoomDetailRoute = useCallback((roomId: string) => {
     const { pathUrl } = buildRoomDetailUrl(roomId);
     window.history.pushState({}, '', pathUrl);
+    setKirPrintRoute(null);
     setAssetDetailRoute({ kode: '', register: '', ruang: roomId });
   }, []);
 
   const closeAssetDetailRoute = useCallback(() => {
     window.history.pushState({}, '', '/');
     setAssetDetailRoute(null);
+  }, []);
+
+  const closeKirPrintRoute = useCallback(() => {
+    window.history.pushState({}, '', '/');
+    setKirPrintRoute(null);
   }, []);
 
   // Persist KIB, Vehicle & Room KIR domain data
@@ -570,6 +622,35 @@ export default function App() {
     () => syncRoomsWithPosAdmins(rooms, managedUsers, locations, currentProfileForDetail),
     [rooms, managedUsers, locations, currentProfileForDetail]
   );
+
+  // Standalone Chrome KIR Print Route (/?print=kir&ruang=... or ?print=kir&scope=all)
+  if (kirPrintRoute) {
+    const printRooms =
+      session && currentProfileForDetail.assignedLocationId
+        ? syncedRoomsForDetail.filter(
+            (r) => r.locationId === currentProfileForDetail.assignedLocationId
+          )
+        : syncedRoomsForDetail;
+    return (
+      <KirPrintStandaloneView
+        rooms={printRooms}
+        roomItems={roomItems}
+        locations={locations}
+        targetRoomId={kirPrintRoute.ruang}
+        scope={kirPrintRoute.scope}
+        autoprint={kirPrintRoute.autoprint}
+        onBackToApp={() => {
+          closeKirPrintRoute();
+          if (session) {
+            setActiveModule('kir');
+          } else {
+            setShowLoginScreen(false);
+            setActiveModule('dashboard');
+          }
+        }}
+      />
+    );
+  }
 
   // Public/Internal Asset & Room KIR Profile Route (/aset/detail?kode=...&register=... or ?ruang=...)
   if (assetDetailRoute) {
@@ -951,7 +1032,12 @@ export default function App() {
   };
 
   const handleVerifyByPengurus = (mutationId: string) => {
-    if (!activeRoleProfile.permissions.canVerifyMutation) return;
+    if (
+      currentRole !== 'SUPER_ADMIN' ||
+      !activeRoleProfile.permissions.canVerifyMutation
+    ) {
+      return;
+    }
     const target = mutations.find((m) => m.id === mutationId);
     if (!target) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -1020,6 +1106,12 @@ export default function App() {
     nextStatus: DamageReportStatus
   ) => {
     if (!activeRoleProfile.permissions.canResolveDamage) return;
+    if (
+      (nextStatus === 'SELESAI_DIPERBAIKI' || nextStatus === 'BARU_DILAPORKAN') &&
+      currentRole !== 'SUPER_ADMIN'
+    ) {
+      return;
+    }
     const target = damageReports.find((d) => d.id === reportId);
     if (!target) return;
     if (lockedLocationId && target.locationId !== lockedLocationId) return;
@@ -1074,11 +1166,7 @@ export default function App() {
   };
 
   const handleCancelDamageReport = (reportId: string) => {
-    const canCancel =
-      activeRoleProfile.permissions.canReportDamage ||
-      activeRoleProfile.permissions.canResolveDamage ||
-      activeRoleProfile.permissions.canDeleteAsset;
-    if (!canCancel) return;
+    if (currentRole !== 'SUPER_ADMIN') return;
     const target = damageReports.find((d) => d.id === reportId);
     if (!target) return;
     if (lockedLocationId && target.locationId !== lockedLocationId) return;
@@ -1115,7 +1203,12 @@ export default function App() {
     observedCondition: ConditionStatus,
     notes: string
   ) => {
-    if (!activeRoleProfile.permissions.canPerformOpname) return;
+    if (
+      currentRole !== 'SUPER_ADMIN' ||
+      !activeRoleProfile.permissions.canPerformOpname
+    ) {
+      return;
+    }
     const targetAsset = assets.find((a) => a.id === assetId);
     if (lockedLocationId && targetAsset && targetAsset.locationId !== lockedLocationId) {
       return;
@@ -1194,12 +1287,7 @@ export default function App() {
     bengkelRujukan?: string;
     verificationNote: string;
   }) => {
-    const canVerify =
-      currentRole === 'SUPER_ADMIN' ||
-      currentRole === 'KASUBAG_UMUM' ||
-      activeRoleProfile.permissions.canApproveMutation ||
-      activeRoleProfile.permissions.canResolveDamage;
-    if (!canVerify) return;
+    if (currentRole !== 'SUPER_ADMIN') return;
     const today = new Date().toISOString().slice(0, 10);
     setMaintenanceRequests((prev) =>
       prev.map((req) =>
@@ -1236,12 +1324,7 @@ export default function App() {
     requestId: string,
     restoreAssetCondition: boolean
   ) => {
-    const canVerify =
-      currentRole === 'SUPER_ADMIN' ||
-      currentRole === 'KASUBAG_UMUM' ||
-      activeRoleProfile.permissions.canApproveMutation ||
-      activeRoleProfile.permissions.canResolveDamage;
-    if (!canVerify) return;
+    if (currentRole !== 'SUPER_ADMIN') return;
     const target = maintenanceRequests.find((r) => r.id === requestId);
     if (!target) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -1297,12 +1380,7 @@ export default function App() {
   };
 
   const handleCancelVerifyMaintenanceRequest = (requestId: string) => {
-    const canVerify =
-      currentRole === 'SUPER_ADMIN' ||
-      currentRole === 'KASUBAG_UMUM' ||
-      activeRoleProfile.permissions.canApproveMutation ||
-      activeRoleProfile.permissions.canResolveDamage;
-    if (!canVerify) return;
+    if (currentRole !== 'SUPER_ADMIN') return;
     const target = maintenanceRequests.find((r) => r.id === requestId);
     if (!target) return;
     const wasCompleted = target.status === 'SELESAI_PERBAIKAN';
@@ -1612,6 +1690,7 @@ export default function App() {
               assets={scopedAssets}
               vehicles={scopedVehicles}
               rooms={scopedRooms}
+              roomItems={scopedRoomItems}
               locations={scopedLocations}
               mutations={scopedMutations}
               damageReports={scopedDamageReports}
@@ -1650,12 +1729,18 @@ export default function App() {
               preselectedDamageAssetId={preselectDamageAssetId}
               onCreateDamageReport={handleCreateDamageReport}
               onUpdateDamageStatus={handleUpdateDamageStatus}
-              onCancelDamageReport={handleCancelDamageReport}
+              onCancelDamageReport={
+                currentRole === 'SUPER_ADMIN' ? handleCancelDamageReport : undefined
+              }
               onUpdateOpnameCheck={handleUpdateOpnameCheck}
-              onRequestMaintenanceForAsset={(assetId) => {
-                setPreselectMaintenanceAssetId(assetId);
-                setActiveModule('pengajuan_pemeliharaan');
-              }}
+              onRequestMaintenanceForAsset={
+                currentRole === 'SUPER_ADMIN'
+                  ? (assetId) => {
+                      setPreselectMaintenanceAssetId(assetId);
+                      setActiveModule('pengajuan_pemeliharaan');
+                    }
+                  : undefined
+              }
             />
           )}
 

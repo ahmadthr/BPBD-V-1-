@@ -10,11 +10,13 @@ import {
   Copy,
   Download,
   Edit3,
+  ExternalLink,
   FileCheck2,
   FileText,
   LogIn,
   MapPin,
   Paperclip,
+  Printer,
   QrCode,
   Shield,
   ShieldCheck,
@@ -44,6 +46,7 @@ import {
 } from '../utils/formatters';
 import {
   buildAssetDetailUrl,
+  buildKirPrintUrl,
   buildRoomDetailUrl,
   copyTextToClipboard,
 } from '../utils/printHelper';
@@ -127,6 +130,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
 
   const normKode = kodeParam.trim().toLowerCase();
   const normReg = registerParam.trim().toLowerCase();
+  const normRegStripped = normReg.replace(/^0+(?=\d)/, '');
 
   // Match against both KIB Master Assets and Vehicle Inventory using kode + register
   const matchedAsset = useMemo(() => {
@@ -135,20 +139,26 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
       assets.find(
         (a) =>
           a.kodeBarang.toLowerCase() === normKode &&
-          (!normReg || a.nomorRegister.toLowerCase() === normReg)
+          (!normReg ||
+            a.nomorRegister.toLowerCase() === normReg ||
+            a.nomorRegister.toLowerCase().replace(/^0+(?=\d)/, '') === normRegStripped)
       ) ??
       assets.find((a) => a.id.toLowerCase() === normKode) ??
+      assets.find((a) => a.kodeBarang.toLowerCase() === normKode) ??
       null
     );
-  }, [assets, normKode, normReg]);
+  }, [assets, normKode, normReg, normRegStripped]);
 
   const matchedVehicle = useMemo(() => {
     if (!normKode) return null;
-    const direct = vehicles.find(
-      (v) =>
-        v.kodeBarang.toLowerCase() === normKode &&
-        (!normReg || v.nomorRegister.toLowerCase() === normReg)
-    );
+    const direct =
+      vehicles.find(
+        (v) =>
+          v.kodeBarang.toLowerCase() === normKode &&
+          (!normReg ||
+            v.nomorRegister.toLowerCase() === normReg ||
+            v.nomorRegister.toLowerCase().replace(/^0+(?=\d)/, '') === normRegStripped)
+      ) ?? vehicles.find((v) => v.kodeBarang.toLowerCase() === normKode);
     if (direct) return direct;
     if (matchedAsset && matchedAsset.nomorPolisiOrSertifikat) {
       return (
@@ -160,7 +170,7 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
       );
     }
     return vehicles.find((v) => v.id.toLowerCase() === normKode) ?? null;
-  }, [vehicles, matchedAsset, normKode, normReg]);
+  }, [vehicles, matchedAsset, normKode, normReg, normRegStripped]);
 
   const normRuang = ruangParam.trim().toLowerCase();
   const isRoomMode = normRuang.length > 0;
@@ -330,6 +340,18 @@ export const AssetPublicProfileView: React.FC<AssetPublicProfileViewProps> = ({
             Endpoint: {dynamicRouteUrl}
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {isFound && !isRestrictedByPos && isRoomMode && matchedRoom && (
+              <a
+                href={buildKirPrintUrl(matchedRoom.id, 'current', true).pathUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-md cursor-pointer whitespace-nowrap"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Cetak KIR di Chrome
+                <ExternalLink className="w-3 h-3 opacity-80" />
+              </a>
+            )}
             {isFound && !isRestrictedByPos && (
               <button
                 type="button"

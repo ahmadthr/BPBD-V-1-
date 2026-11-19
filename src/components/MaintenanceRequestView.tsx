@@ -135,11 +135,7 @@ export const MaintenanceRequestView: React.FC<MaintenanceRequestViewProps> = ({
     roleProfile.permissions.canCreateAsset ||
     roleProfile.permissions.canRequestMutation;
 
-  const canVerifyKasubag =
-    isSuperAdmin ||
-    roleProfile.id === 'KASUBAG_UMUM' ||
-    roleProfile.permissions.canApproveMutation ||
-    roleProfile.permissions.canResolveDamage;
+  const canVerifyKasubag = isSuperAdmin;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -928,7 +924,7 @@ export const MaintenanceRequestView: React.FC<MaintenanceRequestViewProps> = ({
           <p className="text-sm text-slate-600 mt-0.5">
             {isSuperAdmin
               ? 'Usulan perbaikan aset/kendaraan dari Mako & 7 Pos Damkar, verifikasi Kasubag Umpeg, dan unduh draft Word (.docx)'
-              : 'Usulan perbaikan aset/kendaraan dari Mako & 7 Pos Damkar serta verifikasi Kasubag Umpeg'}
+              : 'Usulan perbaikan aset/kendaraan dari Mako & 7 Pos Damkar'}
           </p>
         </div>
 
@@ -1724,8 +1720,8 @@ export const MaintenanceRequestView: React.FC<MaintenanceRequestViewProps> = ({
         </div>
       )}
 
-      {/* Modal 2: Verifikasi & Persetujuan Kasubag Umpeg */}
-      {verifyingRequest && (
+      {/* Modal 2: Verifikasi & Persetujuan Kasubag Umpeg (Super Admin) */}
+      {canVerifyKasubag && verifyingRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4 overflow-y-auto no-print">
           <div className="bg-white border border-slate-200 rounded-lg max-w-lg w-full shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-[#0B2545] text-white">

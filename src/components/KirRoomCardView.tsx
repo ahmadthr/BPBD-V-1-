@@ -7,6 +7,7 @@ import {
   Copy,
   Download,
   Edit3,
+  ExternalLink,
   FileCode2,
   FileSpreadsheet,
   FileText,
@@ -34,13 +35,16 @@ import {
   mapRowsToKirEntries,
 } from '../utils/excelImportHelper';
 import {
+  KIR_LOGO_PATH,
   KirSheetRenderData,
+  buildKirPrintUrl,
   buildRoomDetailUrl,
   copyTextToClipboard,
   downloadHtmlDocument,
   downloadKirPdf,
   downloadKirPng,
   escapeHtml,
+  fetchImageAsDataUrl,
 } from '../utils/printHelper';
 import { ExcelImportModal } from './ExcelImportModal';
 import {
@@ -371,6 +375,19 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
     [selectedRoom]
   );
 
+  const currentChromePrintUrl = useMemo(
+    () =>
+      selectedRoom
+        ? buildKirPrintUrl(selectedRoom.id, 'current', true).pathUrl
+        : '',
+    [selectedRoom]
+  );
+
+  const allChromePrintUrl = useMemo(
+    () => buildKirPrintUrl(undefined, 'all', true).pathUrl,
+    []
+  );
+
   const conditionSummary = useMemo(() => {
     const baik = activeItems.filter((i) => i.kondisi === 'BAIK').reduce((s, i) => s + i.jumlah, 0);
     const rr = activeItems
@@ -395,7 +412,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
         : '';
-    const logoUrl = `${origin}/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png`;
+    const inlineLogo = await fetchImageAsDataUrl(KIR_LOGO_PATH);
+    const logoUrl = inlineLogo ?? `${origin}${KIR_LOGO_PATH}`;
     const todayStr = new Intl.DateTimeFormat('id-ID', {
       day: '2-digit',
       month: 'long',
@@ -429,7 +447,7 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
       <div class="kir-sheet">
         <div class="kir-kop">
           <div class="kir-kop-left">
-            <img src="${escapeHtml(logoUrl)}" alt="Logo BPBD Sidoarjo" class="kir-logo" />
+            <img src="${escapeHtml(logoUrl)}" alt="Logo Pemerintah Kabupaten Sidoarjo" class="kir-logo" />
             <div>
               <div class="kir-gov">Pemerintah Kabupaten Sidoarjo</div>
               <div class="kir-opd">Badan Penanggulangan Bencana Daerah (BPBD)</div>
@@ -550,11 +568,11 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
     try {
       window.print();
       setPrintFeedback(
-        `Perintah cetak "${label}" dikirim ke browser. Jika dialog cetak tidak muncul karena pembatasan iframe, klik "Unduh PDF KIR" di bawah untuk mengunduh lembar A4 siap cetak.`
+        `Perintah cetak "${label}" dikirim ke browser. Jika dialog cetak tidak muncul karena pembatasan iframe, klik "Buka & Cetak di Chrome" atau "Unduh PDF Ruangan Ini".`
       );
     } catch {
       setPrintFeedback(
-        `Dialog cetak diblokir oleh iframe browser. Gunakan tombol "Unduh PDF KIR" atau "Unduh PNG" untuk menyimpan dan mencetak "${label}".`
+        `Dialog cetak diblokir oleh iframe browser. Gunakan "Buka & Cetak di Chrome" atau "Unduh PDF Ruangan Ini" untuk mencetak "${label}".`
       );
     } finally {
       window.setTimeout(cleanup, 1200);
@@ -564,11 +582,6 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
   const handlePrintCurrentKir = () => {
     if (!selectedRoom) return;
     triggerSyncPortalPrint('current', `KIR ${selectedRoom.namaRuang}`);
-  };
-
-  const handlePrintAllKir = () => {
-    if (rooms.length === 0) return;
-    triggerSyncPortalPrint('all', `KIR Semua Ruangan (${rooms.length} Ruang)`);
   };
 
   const handleDownloadCurrentPdf = async () => {
@@ -694,14 +707,24 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {selectedRoom && (
             <>
+              <a
+                href={currentChromePrintUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer whitespace-nowrap"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Cetak KIR di Chrome
+                <ExternalLink className="w-3 h-3 opacity-80" />
+              </a>
               <button
                 type="button"
                 disabled={busyPrint}
                 onClick={handlePrintCurrentKir}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
               >
                 <Printer className="w-3.5 h-3.5" />
-                Cetak KIR Ruangan Ini
+                Cetak Cepat
               </button>
               <button
                 type="button"
@@ -714,15 +737,16 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
               </button>
               {rooms.length > 1 && (
                 <>
-                  <button
-                    type="button"
-                    disabled={busyPrint}
-                    onClick={handlePrintAllKir}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-md cursor-pointer whitespace-nowrap"
+                  <a
+                    href={allChromePrintUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer whitespace-nowrap"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    Cetak Semua ({rooms.length} Ruang)
-                  </button>
+                    Cetak Semua di Chrome ({rooms.length})
+                    <ExternalLink className="w-3 h-3 opacity-75" />
+                  </a>
                   <button
                     type="button"
                     disabled={busyPrint}
@@ -835,15 +859,26 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
       {printFeedback && (
         <div className="px-4 py-3 rounded-md bg-amber-50 border border-amber-300 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
           <span>{printFeedback}</span>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {selectedRoom && (
-              <button
-                type="button"
-                onClick={() => void handleDownloadCurrentPdf()}
-                className="px-3 py-1.5 text-[11px] font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded cursor-pointer"
-              >
-                Unduh PDF Ruangan Ini
-              </button>
+              <>
+                <a
+                  href={currentChromePrintUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded cursor-pointer"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Buka &amp; Cetak di Chrome
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadCurrentPdf()}
+                  className="px-3 py-1.5 text-[11px] font-semibold text-[#0B2545] bg-white border border-amber-300 hover:bg-amber-100 rounded cursor-pointer"
+                >
+                  Unduh PDF Ruangan Ini
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -934,8 +969,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                   <div className="w-14 h-14 shrink-0 flex items-center justify-center">
                     {!logoFailed ? (
                       <img
-                        src="/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png"
-                        alt="Logo BPBD Kabupaten Sidoarjo"
+                        src={KIR_LOGO_PATH}
+                        alt="Logo Pemerintah Kabupaten Sidoarjo"
                         referrerPolicy="no-referrer"
                         onError={() => setLogoFailed(true)}
                         className="w-full h-full object-contain"
@@ -1690,8 +1725,8 @@ export const KirRoomCardView: React.FC<KirRoomCardViewProps> = ({
                     <div className="kir-kop">
                       <div className="kir-kop-left">
                         <img
-                          src="/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png"
-                          alt="Logo BPBD Sidoarjo"
+                          src={KIR_LOGO_PATH}
+                          alt="Logo Pemerintah Kabupaten Sidoarjo"
                           className="kir-logo"
                         />
                         <div>

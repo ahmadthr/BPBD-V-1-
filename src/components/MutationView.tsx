@@ -337,6 +337,7 @@ export const MutationView: React.FC<MutationViewProps> = ({
                             </button>
                           </div>
                         ) : m.status === 'DISETUJUI_KASUBAG' &&
+                          roleProfile.id === 'SUPER_ADMIN' &&
                           roleProfile.permissions.canVerifyMutation ? (
                           <button
                             type="button"
@@ -351,7 +352,7 @@ export const MutationView: React.FC<MutationViewProps> = ({
                             {m.status === 'MENUNGGU_KASUBAG'
                               ? 'Perlu Akses Kasubag'
                               : m.status === 'DISETUJUI_KASUBAG'
-                                ? 'Perlu Pengurus Barang'
+                                ? 'Menunggu Verifikasi Super Admin'
                                 : 'Arsip Tercatat'}
                           </span>
                         )}

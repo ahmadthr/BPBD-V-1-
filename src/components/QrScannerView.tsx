@@ -22,9 +22,11 @@ import {
   AssetMutation,
   ConditionStatus,
   DamageReport,
+  KibCategory,
   LocationUnit,
   OpnameStatus,
   RoleProfile,
+  RoomAssetEntry,
   RoomUnit,
   VehicleItem,
 } from '../types/simas';
@@ -54,6 +56,7 @@ interface QrScannerViewProps {
   assets: AssetItem[];
   vehicles?: VehicleItem[];
   rooms?: RoomUnit[];
+  roomItems?: RoomAssetEntry[];
   locations: LocationUnit[];
   mutations: AssetMutation[];
   damageReports: DamageReport[];
@@ -69,10 +72,21 @@ interface QrScannerViewProps {
   onOpenRoomProfile?: (roomId: string) => void;
 }
 
+type TargetCategoryFilter = 'ALL' | KibCategory | 'KENDARAAN' | 'KIR';
+
+function normalizeRegToken(val: string): string {
+  return val.trim().toLowerCase().replace(/^0+(?=\d)/, '');
+}
+
+function normalizeCompactCode(val: string): string {
+  return val.trim().toLowerCase().replace(/\s+/g, '');
+}
+
 export const QrScannerView: React.FC<QrScannerViewProps> = ({
   assets,
   vehicles = [],
   rooms = [],
+  roomItems = [],
   locations,
   mutations,
   damageReports,
@@ -85,6 +99,8 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
   const lockedLocationId = roleProfile.assignedLocationId || '';
   const [subTab, setSubTab] = useState<'scanner' | 'generator'>('scanner');
   const [manualInput, setManualInput] = useState<string>('');
+  const [targetFilter, setTargetFilter] = useState<TargetCategoryFilter>('ALL');
+  const [targetSearch, setTargetSearch] = useState<string>('');
   const [scannedAssetId, setScannedAssetId] = useState<string>(
     () =>
       (lockedLocationId
@@ -100,6 +116,10 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
     label: string;
   } | null>(null);
   const [scannedRoomLink, setScannedRoomLink] = useState<RoomUnit | null>(null);
+  const [scannedRoomItem, setScannedRoomItem] = useState<{
+    item: RoomAssetEntry;
+    room: RoomUnit | null;
+  } | null>(null);
   const [lastDecodedRaw, setLastDecodedRaw] = useState<string>('');
   const [isScanningAnim, setIsScanningAnim] = useState<boolean>(false);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
@@ -113,6 +133,8 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
   const [generatorLocationFilter, setGeneratorLocationFilter] = useState<string>(
     lockedLocationId || 'ALL'
   );
+  const [generatorKibFilter, setGeneratorKibFilter] = useState<'ALL' | KibCategory>('ALL');
+  const [generatorSearch, setGeneratorSearch] = useState<string>('');
   const [lightboxPhoto, setLightboxPhoto] = useState<PhotoLightboxData | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -137,6 +159,11 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
     [locations]
   );
 
+  const roomMap = useMemo(
+    () => new Map(rooms.map((r) => [r.id, r])),
+    [rooms]
+  );
+
   const scannedAsset = useMemo(
     () => assets.find((a) => a.id === scannedAssetId) ?? null,
     [assets, scannedAssetId]
@@ -148,7 +175,9 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
         vehicles.find(
           (v) =>
             v.kodeBarang.toLowerCase() === scannedCustomLink.kode.toLowerCase() &&
-            v.nomorRegister.toLowerCase() === scannedCustomLink.register.toLowerCase()
+            (!scannedCustomLink.register ||
+              normalizeRegToken(v.nomorRegister) ===
+                normalizeRegToken(scannedCustomLink.register))
         ) ?? null
       );
     }
@@ -157,23 +186,33 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
       vehicles.find(
         (v) =>
           v.kodeBarang.toLowerCase() === scannedAsset.kodeBarang.toLowerCase() &&
-          v.nomorRegister.toLowerCase() === scannedAsset.nomorRegister.toLowerCase()
+          normalizeRegToken(v.nomorRegister) ===
+            normalizeRegToken(scannedAsset.nomorRegister)
       ) ?? null
     );
   }, [vehicles, scannedAsset, scannedCustomLink]);
 
   const activeKode =
-    scannedCustomLink?.kode ?? scannedAsset?.kodeBarang ?? '';
+    scannedRoomItem?.item.kodeBarang ??
+    scannedCustomLink?.kode ??
+    scannedAsset?.kodeBarang ??
+    '';
   const activeRegister =
-    scannedCustomLink?.register ?? scannedAsset?.nomorRegister ?? '';
+    scannedRoomItem?.item.nomorRegister ??
+    scannedCustomLink?.register ??
+    scannedAsset?.nomorRegister ??
+    '';
 
   const activeDetailLinks = useMemo(() => {
     if (scannedRoomLink) {
       return buildRoomDetailUrl(scannedRoomLink.id);
     }
+    if (scannedRoomItem?.room) {
+      return buildRoomDetailUrl(scannedRoomItem.room.id);
+    }
     if (!activeKode) return null;
     return buildAssetDetailUrl(activeKode, activeRegister);
-  }, [scannedRoomLink, activeKode, activeRegister]);
+  }, [scannedRoomLink, scannedRoomItem, activeKode, activeRegister]);
 
   const assetMutations = useMemo(
     () => (scannedAsset ? mutations.filter((m) => m.assetId === scannedAsset.id) : []),
@@ -204,18 +243,153 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
     };
   }, [stopCamera]);
 
-  const triggerSimulatedScan = useCallback(
-    (assetId: string) => {
+  const triggerSimulatedScan = useCallback((assetId: string) => {
+    setIsScanningAnim(true);
+    setOpnameFeedback('');
+    setScannedCustomLink(null);
+    setScannedRoomLink(null);
+    setScannedRoomItem(null);
+    window.setTimeout(() => {
+      setScannedAssetId(assetId);
+      setIsScanningAnim(false);
+    }, 180);
+  }, []);
+
+  const selectVehicleTarget = useCallback((veh: VehicleItem) => {
+    setIsScanningAnim(true);
+    setOpnameFeedback('');
+    setScannedAssetId('');
+    setScannedRoomLink(null);
+    setScannedRoomItem(null);
+    window.setTimeout(() => {
+      setScannedCustomLink({
+        kode: veh.kodeBarang,
+        register: veh.nomorRegister,
+        label: `${veh.namaKendaraan} (${veh.nomorPolisi})`,
+      });
+      setIsScanningAnim(false);
+    }, 150);
+  }, []);
+
+  const selectRoomTarget = useCallback((room: RoomUnit) => {
+    setIsScanningAnim(true);
+    setOpnameFeedback(
+      `QR Kartu Inventaris Ruangan (KIR) terbaca untuk ${room.namaRuang}.`
+    );
+    setScannedAssetId('');
+    setScannedCustomLink(null);
+    setScannedRoomItem(null);
+    window.setTimeout(() => {
+      setScannedRoomLink(room);
+      setIsScanningAnim(false);
+    }, 150);
+  }, []);
+
+  const selectRoomItemTarget = useCallback(
+    (item: RoomAssetEntry) => {
+      const parentRoom = roomMap.get(item.roomId) ?? null;
       setIsScanningAnim(true);
-      setOpnameFeedback('');
+      setOpnameFeedback(
+        `Barang KIR Ruangan terbaca: ${item.namaBarang} (${parentRoom?.namaRuang ?? item.roomId}).`
+      );
+      setScannedAssetId('');
       setScannedCustomLink(null);
       setScannedRoomLink(null);
       window.setTimeout(() => {
-        setScannedAssetId(assetId);
+        setScannedRoomItem({ item, room: parentRoom });
         setIsScanningAnim(false);
-      }, 220);
+      }, 150);
     },
-    []
+    [roomMap]
+  );
+
+  const resolveByKodeRegister = useCallback(
+    (kode: string, register: string, labelHint?: string): boolean => {
+      const normKode = kode.trim().toLowerCase();
+      const normReg = normalizeRegToken(register);
+      if (!normKode) return false;
+
+      const matchedAsset =
+        assets.find(
+          (a) =>
+            a.kodeBarang.toLowerCase() === normKode &&
+            (!normReg || normalizeRegToken(a.nomorRegister) === normReg)
+        ) ??
+        assets.find((a) => a.kodeBarang.toLowerCase() === normKode) ??
+        null;
+      if (matchedAsset) {
+        triggerSimulatedScan(matchedAsset.id);
+        setOpnameFeedback(
+          `QR KIB ${matchedAsset.kibType} terbaca: ${matchedAsset.namaBarang} (${matchedAsset.id}).`
+        );
+        return true;
+      }
+
+      const matchedVeh =
+        vehicles.find(
+          (v) =>
+            v.kodeBarang.toLowerCase() === normKode &&
+            (!normReg || normalizeRegToken(v.nomorRegister) === normReg)
+        ) ??
+        vehicles.find((v) => v.kodeBarang.toLowerCase() === normKode) ??
+        null;
+      if (matchedVeh) {
+        selectVehicleTarget(matchedVeh);
+        setOpnameFeedback(
+          `QR Kendaraan terbaca: ${matchedVeh.namaKendaraan} (${matchedVeh.nomorPolisi}).`
+        );
+        return true;
+      }
+
+      const matchedRoomItem =
+        roomItems.find(
+          (it) =>
+            it.kodeBarang.toLowerCase() === normKode &&
+            (!normReg || normalizeRegToken(it.nomorRegister) === normReg)
+        ) ??
+        roomItems.find((it) => it.kodeBarang.toLowerCase() === normKode) ??
+        null;
+      if (matchedRoomItem) {
+        selectRoomItemTarget(matchedRoomItem);
+        return true;
+      }
+
+      const matchedRoom = rooms.find(
+        (r) => r.kodeRuang.toLowerCase() === normKode
+      );
+      if (matchedRoom) {
+        selectRoomTarget(matchedRoom);
+        return true;
+      }
+
+      if (lockedLocationId) {
+        return false;
+      }
+
+      setScannedAssetId('');
+      setScannedRoomLink(null);
+      setScannedRoomItem(null);
+      setScannedCustomLink({
+        kode: kode.trim(),
+        register: register.trim(),
+        label: labelHint?.trim() || `Barang / KIB (${kode.trim()})`,
+      });
+      setOpnameFeedback(
+        `QR Terbaca! Kode Barang ${kode.trim()}${register.trim() ? ` (Reg. ${register.trim()})` : ''} siap dibuka.`
+      );
+      return true;
+    },
+    [
+      assets,
+      vehicles,
+      roomItems,
+      rooms,
+      lockedLocationId,
+      triggerSimulatedScan,
+      selectVehicleTarget,
+      selectRoomItemTarget,
+      selectRoomTarget,
+    ]
   );
 
   const processScannedCode = useCallback(
@@ -224,12 +398,57 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
       if (!raw) return false;
       setLastDecodedRaw(raw);
 
-      // 1. URL format: ?aset=detail&kode=...&register=..., ?aset=ruang&ruang=..., /aset/detail?..., or #/...
-      if (raw.includes('kode=') || raw.includes('ruang=')) {
+      // 1. JSON QR payload (external e-BMD / SIMDA / custom JSON QR)
+      if (raw.startsWith('{') && raw.endsWith('}')) {
         try {
-          const normalizedInput = raw.includes('#')
-            ? raw.replace('#', '')
-            : raw;
+          const obj = JSON.parse(raw) as Record<string, unknown>;
+          const ruangVal = String(obj.ruang ?? obj.kodeRuang ?? obj.roomId ?? '').trim();
+          if (ruangVal) {
+            const matchedRoom = rooms.find(
+              (r) =>
+                r.id.toLowerCase() === ruangVal.toLowerCase() ||
+                r.kodeRuang.toLowerCase() === ruangVal.toLowerCase()
+            );
+            if (matchedRoom) {
+              selectRoomTarget(matchedRoom);
+              return true;
+            }
+          }
+          const kodeVal = String(
+            obj.kodeBarang ?? obj.kode_barang ?? obj.kode ?? ''
+          ).trim();
+          const regVal = String(
+            obj.nomorRegister ?? obj.nomor_register ?? obj.register ?? obj.reg ?? ''
+          ).trim();
+          const namaVal = String(obj.namaBarang ?? obj.nama ?? obj.name ?? '').trim();
+          if (kodeVal && resolveByKodeRegister(kodeVal, regVal, namaVal)) {
+            return true;
+          }
+          const idVal = String(obj.id ?? '').trim();
+          if (idVal) {
+            const byId = assets.find((a) => a.id.toLowerCase() === idVal.toLowerCase());
+            if (byId) {
+              triggerSimulatedScan(byId.id);
+              return true;
+            }
+          }
+        } catch {
+          // Not valid JSON, continue
+        }
+      }
+
+      // 2. URL format: ?aset=detail&kode=...&register=..., ?aset=ruang&ruang=..., /aset/detail?..., or #/...
+      if (
+        raw.includes('kode=') ||
+        raw.includes('kodeBarang=') ||
+        raw.includes('ruang=') ||
+        raw.startsWith('http://') ||
+        raw.startsWith('https://') ||
+        raw.startsWith('/?') ||
+        raw.startsWith('?')
+      ) {
+        try {
+          const normalizedInput = raw.includes('#') ? raw.replace('#', '') : raw;
           const parsedUrl = new URL(
             normalizedInput.startsWith('http')
               ? normalizedInput
@@ -239,7 +458,10 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                     : `/${normalizedInput}`
                 }`
           );
-          const ruang = parsedUrl.searchParams.get('ruang') ?? '';
+          const ruang =
+            parsedUrl.searchParams.get('ruang') ??
+            parsedUrl.searchParams.get('room') ??
+            '';
           if (ruang) {
             const matchedRoom = rooms.find(
               (r) =>
@@ -249,54 +471,38 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
             if (lockedLocationId && !matchedRoom) {
               return false;
             }
+            if (matchedRoom) {
+              selectRoomTarget(matchedRoom);
+              return true;
+            }
+            setScannedAssetId('');
             setScannedCustomLink(null);
-            setScannedRoomLink(
-              matchedRoom ?? {
-                id: ruang,
-                kodeRuang: ruang,
-                namaRuang: `Ruangan ${ruang}`,
-                locationId: '',
-                lantaiGedung: '-',
-                penanggungJawab: '-',
-                nipPenanggungJawab: '-',
-                jabatanPenanggungJawab: '-',
-              }
-            );
-            setOpnameFeedback(
-              `QR Kartu Inventaris Ruangan (KIR) terbaca untuk ${matchedRoom?.namaRuang ?? ruang}.`
-            );
+            setScannedRoomItem(null);
+            setScannedRoomLink({
+              id: ruang,
+              kodeRuang: ruang,
+              namaRuang: `Ruangan ${ruang}`,
+              locationId: '',
+              lantaiGedung: '-',
+              penanggungJawab: '-',
+              nipPenanggungJawab: '-',
+              jabatanPenanggungJawab: '-',
+            });
+            setOpnameFeedback(`QR Kartu Inventaris Ruangan (KIR) terbaca untuk ${ruang}.`);
             return true;
           }
 
-          const kode = parsedUrl.searchParams.get('kode') ?? '';
-          const register = parsedUrl.searchParams.get('register') ?? '';
-          if (kode) {
-            setScannedRoomLink(null);
-            const matchedAsset = assets.find(
-              (a) =>
-                a.kodeBarang.toLowerCase() === kode.toLowerCase() &&
-                (!register || a.nomorRegister.toLowerCase() === register.toLowerCase())
-            );
-            if (matchedAsset) {
-              triggerSimulatedScan(matchedAsset.id);
-              return true;
-            }
-            const matchedVeh = vehicles.find(
-              (v) =>
-                v.kodeBarang.toLowerCase() === kode.toLowerCase() &&
-                (!register || v.nomorRegister.toLowerCase() === register.toLowerCase())
-            );
-            if (lockedLocationId && !matchedVeh) {
-              return false;
-            }
-            setScannedCustomLink({
-              kode,
-              register,
-              label: matchedVeh?.namaKendaraan ?? `Aset ${kode}`,
-            });
-            setOpnameFeedback(
-              `QR Terbaca! Tautan profil aset siap dibuka untuk kode ${kode} (Reg. ${register}).`
-            );
+          const kode =
+            parsedUrl.searchParams.get('kode') ??
+            parsedUrl.searchParams.get('kodeBarang') ??
+            parsedUrl.searchParams.get('kode_barang') ??
+            '';
+          const register =
+            parsedUrl.searchParams.get('register') ??
+            parsedUrl.searchParams.get('nomorRegister') ??
+            parsedUrl.searchParams.get('reg') ??
+            '';
+          if (kode && resolveByKodeRegister(kode, register)) {
             return true;
           }
         } catch {
@@ -304,69 +510,157 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
         }
       }
 
-      // 2. Pipe format: SIMAS-BMD|BPBD-SDA|<kode>|<register>
-      const pipeParts = raw.split('|').map((s) => s.trim());
-      if (pipeParts.length >= 4 && pipeParts[0].toUpperCase() === 'SIMAS-BMD') {
-        const [, , kode, register] = pipeParts;
-        const matched = assets.find(
-          (a) =>
-            a.kodeBarang.toLowerCase() === kode.toLowerCase() &&
-            a.nomorRegister.toLowerCase() === register.toLowerCase()
-        );
-        if (matched) {
-          triggerSimulatedScan(matched.id);
-          return true;
-        }
-        const matchedVeh = vehicles.find(
-          (v) =>
-            v.kodeBarang.toLowerCase() === kode.toLowerCase() &&
-            v.nomorRegister.toLowerCase() === register.toLowerCase()
-        );
-        if (matchedVeh) {
-          setScannedCustomLink({
-            kode: matchedVeh.kodeBarang,
-            register: matchedVeh.nomorRegister,
-            label: matchedVeh.namaKendaraan,
-          });
-          return true;
+      // 3. Pipe / semicolon delimited formats: SIMAS-BMD|BPBD-SDA|<kode>|<reg>, KIB-X|<kode>|<reg>, or <kode>|<reg>
+      if (raw.includes('|') || raw.includes(';')) {
+        const sep = raw.includes('|') ? '|' : ';';
+        const parts = raw.split(sep).map((s) => s.trim());
+        if (parts.length >= 4 && parts[0].toUpperCase() === 'SIMAS-BMD') {
+          if (resolveByKodeRegister(parts[2], parts[3])) return true;
+        } else if (parts.length >= 3 && parts[0].toUpperCase().startsWith('KIB')) {
+          if (resolveByKodeRegister(parts[1], parts[2])) return true;
+        } else if (parts.length >= 2) {
+          if (resolveByKodeRegister(parts[0], parts[1])) return true;
         }
       }
 
-      // 3. Direct ID, code, plate number, or asset name
+      // 4. Direct match across ALL KIB A-F assets, vehicles, KIR rooms, & KIR room items
       const q = raw.toLowerCase();
-      const match = assets.find(
+      const compactQ = normalizeCompactCode(raw);
+
+      const assetExact = assets.find(
         (a) =>
           a.id.toLowerCase() === q ||
           a.qrPayload.toLowerCase() === q ||
           a.kodeBarang.toLowerCase() === q ||
-          a.namaBarang.toLowerCase().includes(q) ||
-          a.nomorPolisiOrSertifikat.toLowerCase() === q
+          normalizeCompactCode(a.nomorPolisiOrSertifikat) === compactQ ||
+          `${a.kodeBarang.toLowerCase()}/${a.nomorRegister.toLowerCase()}` === q ||
+          `${a.kodeBarang.toLowerCase()}-${a.nomorRegister.toLowerCase()}` === q
       );
-      if (match) {
-        triggerSimulatedScan(match.id);
+      if (assetExact) {
+        triggerSimulatedScan(assetExact.id);
+        setOpnameFeedback(
+          `Aset KIB ${assetExact.kibType} terbaca: ${assetExact.namaBarang} (${assetExact.id}).`
+        );
         return true;
       }
 
-      const vehMatch = vehicles.find(
+      const vehExact = vehicles.find(
         (v) =>
           v.id.toLowerCase() === q ||
-          v.nomorPolisi.toLowerCase() === q ||
+          normalizeCompactCode(v.nomorPolisi) === compactQ ||
           v.nomorRangka.toLowerCase() === q ||
+          v.nomorMesin.toLowerCase() === q ||
           v.kodeBarang.toLowerCase() === q
       );
-      if (vehMatch) {
-        setScannedRoomLink(null);
-        setScannedCustomLink({
-          kode: vehMatch.kodeBarang,
-          register: vehMatch.nomorRegister,
-          label: `${vehMatch.namaKendaraan} (${vehMatch.nomorPolisi})`,
-        });
+      if (vehExact) {
+        selectVehicleTarget(vehExact);
+        setOpnameFeedback(
+          `Kendaraan terbaca: ${vehExact.namaKendaraan} (${vehExact.nomorPolisi}).`
+        );
+        return true;
+      }
+
+      const roomExact = rooms.find(
+        (r) =>
+          r.id.toLowerCase() === q ||
+          r.kodeRuang.toLowerCase() === q ||
+          r.namaRuang.toLowerCase() === q
+      );
+      if (roomExact) {
+        selectRoomTarget(roomExact);
+        return true;
+      }
+
+      const roomItemExact = roomItems.find(
+        (it) => it.id.toLowerCase() === q || it.kodeBarang.toLowerCase() === q
+      );
+      if (roomItemExact) {
+        selectRoomItemTarget(roomItemExact);
+        return true;
+      }
+
+      // 5. Embedded Permendagri Kode Barang extraction from multiline/sticker text
+      const kodeMatches = raw.match(/\b\d\.\d\.\d(?:\.\d{1,3}){2,5}\b/g);
+      if (kodeMatches && kodeMatches.length > 0) {
+        const regMatch = raw.match(/(?:reg(?:ister)?|no\.?\s*reg)\s*[:#-]?\s*([A-Za-z0-9]+)/i);
+        const extractedKode = kodeMatches[0];
+        const extractedReg = regMatch?.[1] ?? '';
+        if (resolveByKodeRegister(extractedKode, extractedReg)) {
+          return true;
+        }
+      }
+
+      // 6. Fuzzy partial match across ALL KIB A-F assets, vehicles, KIR rooms, & KIR items
+      const kibQueryMatch = q.match(/^kib\s*([a-f])$/i);
+      if (kibQueryMatch) {
+        const targetKib = kibQueryMatch[1].toUpperCase() as KibCategory;
+        const kibAsset = assets.find((a) => a.kibType === targetKib);
+        if (kibAsset) {
+          setTargetFilter(targetKib);
+          triggerSimulatedScan(kibAsset.id);
+          setOpnameFeedback(
+            `Menampilkan KIB ${targetKib}: ${kibAsset.namaBarang} (${kibAsset.id}).`
+          );
+          return true;
+        }
+      }
+
+      const assetPartial = assets.find(
+        (a) =>
+          a.namaBarang.toLowerCase().includes(q) ||
+          a.merkTipe.toLowerCase().includes(q) ||
+          a.kodeBarang.toLowerCase().includes(q) ||
+          a.nomorPolisiOrSertifikat.toLowerCase().includes(q)
+      );
+      if (assetPartial) {
+        triggerSimulatedScan(assetPartial.id);
+        setOpnameFeedback(
+          `Aset KIB ${assetPartial.kibType} terbaca: ${assetPartial.namaBarang} (${assetPartial.id}).`
+        );
+        return true;
+      }
+
+      const vehPartial = vehicles.find(
+        (v) =>
+          v.namaKendaraan.toLowerCase().includes(q) ||
+          v.merkTipe.toLowerCase().includes(q) ||
+          v.nomorPolisi.toLowerCase().includes(q)
+      );
+      if (vehPartial) {
+        selectVehicleTarget(vehPartial);
+        return true;
+      }
+
+      const roomPartial = rooms.find((r) => r.namaRuang.toLowerCase().includes(q));
+      if (roomPartial) {
+        selectRoomTarget(roomPartial);
+        return true;
+      }
+
+      const roomItemPartial = roomItems.find(
+        (it) =>
+          it.namaBarang.toLowerCase().includes(q) ||
+          it.merkModel.toLowerCase().includes(q)
+      );
+      if (roomItemPartial) {
+        selectRoomItemTarget(roomItemPartial);
         return true;
       }
 
       return false;
     },
-    [assets, vehicles, rooms, lockedLocationId, triggerSimulatedScan]
+    [
+      assets,
+      vehicles,
+      rooms,
+      roomItems,
+      lockedLocationId,
+      resolveByKodeRegister,
+      triggerSimulatedScan,
+      selectVehicleTarget,
+      selectRoomTarget,
+      selectRoomItemTarget,
+    ]
   );
 
   // Attach active MediaStream to always-mounted <video> element and ensure mobile playback
@@ -668,10 +962,82 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
     }
   };
 
+  const filteredTargetAssets = useMemo(() => {
+    const q = targetSearch.trim().toLowerCase();
+    return assets.filter((a) => {
+      if (targetFilter !== 'ALL' && targetFilter !== 'KENDARAAN' && targetFilter !== 'KIR') {
+        if (a.kibType !== targetFilter) return false;
+      }
+      if (!q) return true;
+      return (
+        a.id.toLowerCase().includes(q) ||
+        a.namaBarang.toLowerCase().includes(q) ||
+        a.kodeBarang.toLowerCase().includes(q) ||
+        a.merkTipe.toLowerCase().includes(q) ||
+        a.nomorPolisiOrSertifikat.toLowerCase().includes(q) ||
+        `kib ${a.kibType}`.toLowerCase().includes(q)
+      );
+    });
+  }, [assets, targetFilter, targetSearch]);
+
+  const filteredTargetVehicles = useMemo(() => {
+    const q = targetSearch.trim().toLowerCase();
+    return vehicles.filter((v) => {
+      if (!q) return true;
+      return (
+        v.id.toLowerCase().includes(q) ||
+        v.namaKendaraan.toLowerCase().includes(q) ||
+        v.nomorPolisi.toLowerCase().includes(q) ||
+        v.kodeBarang.toLowerCase().includes(q) ||
+        v.merkTipe.toLowerCase().includes(q)
+      );
+    });
+  }, [vehicles, targetSearch]);
+
+  const filteredTargetRooms = useMemo(() => {
+    const q = targetSearch.trim().toLowerCase();
+    return rooms.filter((r) => {
+      if (!q) return true;
+      return (
+        r.id.toLowerCase().includes(q) ||
+        r.namaRuang.toLowerCase().includes(q) ||
+        r.kodeRuang.toLowerCase().includes(q)
+      );
+    });
+  }, [rooms, targetSearch]);
+
+  const filteredTargetRoomItems = useMemo(() => {
+    const q = targetSearch.trim().toLowerCase();
+    return roomItems.filter((it) => {
+      if (!q) return true;
+      return (
+        it.id.toLowerCase().includes(q) ||
+        it.namaBarang.toLowerCase().includes(q) ||
+        it.kodeBarang.toLowerCase().includes(q) ||
+        it.merkModel.toLowerCase().includes(q)
+      );
+    });
+  }, [roomItems, targetSearch]);
+
   const generatorAssets = useMemo(() => {
-    if (generatorLocationFilter === 'ALL') return assets;
-    return assets.filter((a) => a.locationId === generatorLocationFilter);
-  }, [assets, generatorLocationFilter]);
+    const q = generatorSearch.trim().toLowerCase();
+    return assets.filter((a) => {
+      if (generatorLocationFilter !== 'ALL' && a.locationId !== generatorLocationFilter) {
+        return false;
+      }
+      if (generatorKibFilter !== 'ALL' && a.kibType !== generatorKibFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        a.id.toLowerCase().includes(q) ||
+        a.namaBarang.toLowerCase().includes(q) ||
+        a.kodeBarang.toLowerCase().includes(q) ||
+        a.merkTipe.toLowerCase().includes(q) ||
+        a.nomorPolisiOrSertifikat.toLowerCase().includes(q)
+      );
+    });
+  }, [assets, generatorLocationFilter, generatorKibFilter, generatorSearch]);
 
   const buildAllStickersHtml = async () => {
     const blocks = await Promise.all(
@@ -967,7 +1333,7 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
             {/* Manual Payload Lookup */}
             <form onSubmit={handleManualLookup} className="space-y-2">
               <label className="block text-xs font-semibold text-slate-700">
-                Cari / Masukkan Payload QR, URL Tautan QR, atau Plat Nomor
+                Cari / Masukkan Payload QR, Kode Barang KIB A–F, URL, atau Plat Nomor
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -976,7 +1342,7 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                     type="text"
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
-                    placeholder="SIMAS-BMD|BPBD-SDA|1.3.2.02.01.06.004|0014 atau W 9808 NP"
+                    placeholder="Kode KIB, ID Aset, URL QR, Nama Barang, atau W 9808 NP"
                     className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-[#0B2545]"
                   />
                 </div>
@@ -989,48 +1355,276 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
               </div>
             </form>
 
-            {/* Quick Simulation Targets */}
-            <div className="pt-3 border-t border-slate-200 space-y-2">
-              <p className="text-xs font-semibold text-slate-700">
-                Simulasi Bidik Stiker QR Aset Lapangan:
-              </p>
-              <div className="grid grid-cols-1 gap-1.5 max-h-52 overflow-y-auto pr-1">
-                {assets.slice(0, 8).map((item) => {
-                  const isSelected = !scannedCustomLink && item.id === scannedAssetId;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => triggerSimulatedScan(item.id)}
-                      className={`text-left px-3 py-2 rounded-md border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#0B2545] text-white border-[#0B2545]'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <span className="truncate font-medium">
-                        <span className="font-mono mr-1.5">{item.id}</span>
-                        {item.namaBarang}
-                      </span>
-                      <span
-                        className={`font-mono text-[11px] shrink-0 ${
-                          isSelected ? 'text-amber-300' : 'text-slate-500'
+            {/* Quick Simulation Targets — ALL KIB A-F, Vehicles & KIR Rooms */}
+            <div className="pt-3 border-t border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-700">
+                  Pilih Semua Barang / KIB / Ruangan ({assets.length} KIB · {vehicles.length} Kendaraan · {rooms.length} Ruang):
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select
+                  value={targetFilter}
+                  onChange={(e) => setTargetFilter(e.target.value as TargetCategoryFilter)}
+                  aria-label="Filter kategori KIB atau jenis barang"
+                  className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-md bg-white text-slate-800"
+                >
+                  <option value="ALL">Semua KIB &amp; Barang ({assets.length})</option>
+                  <option value="A">KIB A · Tanah ({assets.filter((a) => a.kibType === 'A').length})</option>
+                  <option value="B">KIB B · Peralatan &amp; Mesin ({assets.filter((a) => a.kibType === 'B').length})</option>
+                  <option value="C">KIB C · Gedung &amp; Bangunan ({assets.filter((a) => a.kibType === 'C').length})</option>
+                  <option value="D">KIB D · Jalan, Irigasi &amp; Jaringan ({assets.filter((a) => a.kibType === 'D').length})</option>
+                  <option value="E">KIB E · Aset Tetap Lainnya ({assets.filter((a) => a.kibType === 'E').length})</option>
+                  <option value="F">KIB F · Konstruksi dlm Pengerjaan ({assets.filter((a) => a.kibType === 'F').length})</option>
+                  <option value="KENDARAAN">Inventaris Kendaraan ({vehicles.length})</option>
+                  <option value="KIR">KIR Ruangan &amp; Barang Ruang ({rooms.length + roomItems.length})</option>
+                </select>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={targetSearch}
+                    onChange={(e) => setTargetSearch(e.target.value)}
+                    placeholder="Filter nama / kode / plat..."
+                    className="w-full pl-8 pr-2.5 py-1.5 text-xs border border-slate-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                {targetFilter !== 'KENDARAAN' &&
+                  targetFilter !== 'KIR' &&
+                  filteredTargetAssets.map((item) => {
+                    const isSelected =
+                      !scannedCustomLink &&
+                      !scannedRoomLink &&
+                      !scannedRoomItem &&
+                      item.id === scannedAssetId;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => triggerSimulatedScan(item.id)}
+                        className={`text-left px-3 py-2 rounded-md border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#0B2545] text-white border-[#0B2545]'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        KIB {item.kibType}
-                      </span>
-                    </button>
-                  );
-                })}
+                        <span className="truncate font-medium">
+                          <span className="font-mono mr-1.5">{item.id}</span>
+                          {item.namaBarang}
+                        </span>
+                        <span
+                          className={`font-mono text-[11px] shrink-0 ${
+                            isSelected ? 'text-amber-300' : 'text-slate-500'
+                          }`}
+                        >
+                          KIB {item.kibType}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                {(targetFilter === 'KENDARAAN' ||
+                  (targetFilter === 'ALL' && targetSearch.trim().length > 0)) &&
+                  filteredTargetVehicles.map((veh) => {
+                    const isSelected =
+                      Boolean(scannedCustomLink) &&
+                      scannedVehicle?.id === veh.id &&
+                      !scannedAsset;
+                    return (
+                      <button
+                        key={veh.id}
+                        type="button"
+                        onClick={() => selectVehicleTarget(veh)}
+                        className={`text-left px-3 py-2 rounded-md border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#0B2545] text-white border-[#0B2545]'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="truncate font-medium">
+                          <span className="font-mono mr-1.5">{veh.id}</span>
+                          {veh.namaKendaraan} ({veh.nomorPolisi})
+                        </span>
+                        <span
+                          className={`font-mono text-[11px] shrink-0 ${
+                            isSelected ? 'text-amber-300' : 'text-slate-500'
+                          }`}
+                        >
+                          Kendaraan
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                {(targetFilter === 'KIR' ||
+                  (targetFilter === 'ALL' && targetSearch.trim().length > 0)) && (
+                  <>
+                    {filteredTargetRooms.map((rm) => {
+                      const isSelected = scannedRoomLink?.id === rm.id;
+                      return (
+                        <button
+                          key={rm.id}
+                          type="button"
+                          onClick={() => selectRoomTarget(rm)}
+                          className={`text-left px-3 py-2 rounded-md border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#0B2545] text-white border-[#0B2545]'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className="truncate font-medium">
+                            <span className="font-mono mr-1.5">{rm.kodeRuang}</span>
+                            {rm.namaRuang}
+                          </span>
+                          <span
+                            className={`font-mono text-[11px] shrink-0 ${
+                              isSelected ? 'text-amber-300' : 'text-slate-500'
+                            }`}
+                          >
+                            KIR Ruang
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {filteredTargetRoomItems.map((it) => {
+                      const isSelected = scannedRoomItem?.item.id === it.id;
+                      return (
+                        <button
+                          key={it.id}
+                          type="button"
+                          onClick={() => selectRoomItemTarget(it)}
+                          className={`text-left px-3 py-2 rounded-md border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#0B2545] text-white border-[#0B2545]'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className="truncate font-medium">
+                            <span className="font-mono mr-1.5">{it.id}</span>
+                            {it.namaBarang}
+                          </span>
+                          <span
+                            className={`font-mono text-[11px] shrink-0 ${
+                              isSelected ? 'text-amber-300' : 'text-slate-500'
+                            }`}
+                          >
+                            KIR Barang
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           {/* Right Panel: Real-time Inspection Result & Field Actions */}
           <div className="lg:col-span-7 bg-white border border-slate-200 rounded-lg p-6 space-y-5">
-            {!scannedAsset && !scannedVehicle ? (
+            {!scannedAsset &&
+            !scannedVehicle &&
+            !scannedRoomLink &&
+            !scannedRoomItem &&
+            !scannedCustomLink ? (
               <div className="py-12 text-center text-xs text-slate-500">
-                Pilih atau pindai kode QR aset untuk menampilkan informasi real-time.
+                Pilih atau pindai kode QR aset, KIB A–F, kendaraan, atau KIR ruangan untuk menampilkan informasi real-time.
+              </div>
+            ) : scannedRoomItem ? (
+              <div className="space-y-4 text-xs">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+                  <div>
+                    <p className="font-mono font-semibold text-[#0B2545]">
+                      BARANG KIR RUANGAN · {scannedRoomItem.item.id} · Reg.{' '}
+                      {scannedRoomItem.item.nomorRegister}
+                    </p>
+                    <h3 className="font-display text-lg font-bold text-slate-900 mt-1">
+                      {scannedRoomItem.item.namaBarang}
+                    </h3>
+                    <p className="text-slate-600 mt-0.5">
+                      {scannedRoomItem.item.merkModel} · Tahun {scannedRoomItem.item.tahunPerolehan}
+                    </p>
+                  </div>
+                  <ConditionIndicator condition={scannedRoomItem.item.kondisi} />
+                </div>
+                {opnameFeedback && (
+                  <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium">
+                    {opnameFeedback}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-slate-500 block">Kode Barang Permendagri</span>
+                    <span className="font-mono font-semibold text-slate-900">
+                      {scannedRoomItem.item.kodeBarang}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Jumlah</span>
+                    <span className="font-semibold text-slate-900">
+                      {scannedRoomItem.item.jumlah} {scannedRoomItem.item.satuan}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Ruangan Terdaftar</span>
+                    <span className="font-semibold text-slate-900">
+                      {scannedRoomItem.room?.namaRuang ?? scannedRoomItem.item.roomId}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Keterangan</span>
+                    <span className="text-slate-800">
+                      {scannedRoomItem.item.keterangan || '-'}
+                    </span>
+                  </div>
+                </div>
+                {onOpenRoomProfile && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenRoomProfile(
+                        scannedRoomItem.room?.id ?? scannedRoomItem.item.roomId
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Buka Profil KIR Ruangan
+                  </button>
+                )}
+              </div>
+            ) : scannedRoomLink ? (
+              <div className="space-y-4 text-xs">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+                  <div>
+                    <p className="font-mono font-semibold text-[#0B2545]">
+                      KIR RUANGAN · {scannedRoomLink.kodeRuang}
+                    </p>
+                    <h3 className="font-display text-lg font-bold text-slate-900 mt-1">
+                      {scannedRoomLink.namaRuang}
+                    </h3>
+                    <p className="text-slate-600 mt-0.5">
+                      {locationMap.get(scannedRoomLink.locationId)?.name ??
+                        scannedRoomLink.lantaiGedung}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-slate-600">
+                  Penanggung Jawab: <strong>{scannedRoomLink.penanggungJawab}</strong>
+                </p>
+                {onOpenRoomProfile && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenRoomProfile(scannedRoomLink.id)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Buka Halaman Profil KIR Ruangan
+                  </button>
+                )}
               </div>
             ) : scannedCustomLink && !scannedAsset && scannedVehicle ? (
               <div className="space-y-4 text-xs">
@@ -1083,35 +1677,35 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                   Buka Halaman Profil Kendaraan
                 </button>
               </div>
-            ) : scannedRoomLink ? (
+            ) : scannedCustomLink && !scannedAsset ? (
               <div className="space-y-4 text-xs">
-                <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
-                  <div>
-                    <p className="font-mono font-semibold text-[#0B2545]">
-                      KIR RUANGAN · {scannedRoomLink.kodeRuang}
-                    </p>
-                    <h3 className="font-display text-lg font-bold text-slate-900 mt-1">
-                      {scannedRoomLink.namaRuang}
-                    </h3>
-                    <p className="text-slate-600 mt-0.5">
-                      {locationMap.get(scannedRoomLink.locationId)?.name ??
-                        scannedRoomLink.lantaiGedung}
-                    </p>
-                  </div>
+                <div className="border-b border-slate-200 pb-4">
+                  <p className="font-mono font-semibold text-[#0B2545]">
+                    QR KODE BARANG / KIB · {scannedCustomLink.kode}
+                    {scannedCustomLink.register ? ` · Reg. ${scannedCustomLink.register}` : ''}
+                  </p>
+                  <h3 className="font-display text-lg font-bold text-slate-900 mt-1">
+                    {scannedCustomLink.label}
+                  </h3>
                 </div>
-                <p className="text-slate-600">
-                  Penanggung Jawab: <strong>{scannedRoomLink.penanggungJawab}</strong>
-                </p>
-                {onOpenRoomProfile && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenRoomProfile(scannedRoomLink.id)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Buka Halaman Profil KIR Ruangan
-                  </button>
+                {opnameFeedback && (
+                  <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium">
+                    {opnameFeedback}
+                  </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenPublicProfile(
+                      scannedCustomLink.kode,
+                      scannedCustomLink.register
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] rounded-md cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Buka Halaman Profil Aset
+                </button>
               </div>
             ) : (
               scannedAsset && (
@@ -1217,7 +1811,8 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                       Aksi Cek Lapangan &amp; Opname Cepat
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {roleProfile.permissions.canPerformOpname && (
+                      {roleProfile.id === 'SUPER_ADMIN' &&
+                        roleProfile.permissions.canPerformOpname && (
                         <>
                           <button
                             type="button"
@@ -1324,23 +1919,18 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
       ) : (
         /* Generator & Cetak Label Massal */
         <div className="space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-lg p-4 no-print">
-            <div className="flex items-center gap-3">
-              <label
-                htmlFor="qr-loc-filter"
-                className="text-xs font-semibold text-slate-700 whitespace-nowrap"
-              >
-                Filter Lokasi Stiker:
-              </label>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white border border-slate-200 rounded-lg p-4 no-print">
+            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 id="qr-loc-filter"
                 value={lockedLocationId || generatorLocationFilter}
                 disabled={Boolean(lockedLocationId)}
                 onChange={(e) => setGeneratorLocationFilter(e.target.value)}
+                aria-label="Filter lokasi stiker QR"
                 className="px-3 py-1.5 text-xs border border-slate-300 rounded-md bg-white disabled:bg-slate-100 disabled:text-slate-700"
               >
                 {!lockedLocationId && (
-                  <option value="ALL">Semua Lokasi ({assets.length} Label)</option>
+                  <option value="ALL">Semua Lokasi ({assets.length} Barang)</option>
                 )}
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -1348,12 +1938,38 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                   </option>
                 ))}
               </select>
+              <select
+                value={generatorKibFilter}
+                onChange={(e) =>
+                  setGeneratorKibFilter(e.target.value as 'ALL' | KibCategory)
+                }
+                aria-label="Filter kategori KIB stiker QR"
+                className="px-3 py-1.5 text-xs border border-slate-300 rounded-md bg-white text-slate-800"
+              >
+                <option value="ALL">Semua KIB A–F</option>
+                <option value="A">KIB A (Tanah)</option>
+                <option value="B">KIB B (Peralatan &amp; Mesin)</option>
+                <option value="C">KIB C (Gedung &amp; Bangunan)</option>
+                <option value="D">KIB D (Jalan, Irigasi &amp; Jaringan)</option>
+                <option value="E">KIB E (Aset Tetap Lainnya)</option>
+                <option value="F">KIB F (Konstruksi dlm Pengerjaan)</option>
+              </select>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={generatorSearch}
+                  onChange={(e) => setGeneratorSearch(e.target.value)}
+                  placeholder="Cari barang / kode KIB..."
+                  className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-md w-48"
+                />
+              </div>
             </div>
             {roleProfile.permissions.canPrintQr && (
-              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
                 <button
                   type="button"
-                  disabled={printingAll}
+                  disabled={printingAll || generatorAssets.length === 0}
                   onClick={() => void handlePrintAllLabels()}
                   className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#0B2545] hover:bg-[#133C73] disabled:opacity-50 rounded-md cursor-pointer"
                 >
@@ -1364,7 +1980,7 @@ export const QrScannerView: React.FC<QrScannerViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  disabled={printingAll}
+                  disabled={printingAll || generatorAssets.length === 0}
                   onClick={() => void handleDownloadAllLabelsHtml()}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-50 rounded-md cursor-pointer"
                 >

@@ -81,6 +81,7 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
   const [estimatedAction, setEstimatedAction] = useState<string>('');
 
   const lockedLocationId = roleProfile.assignedLocationId || '';
+  const isSuperAdmin = roleProfile.id === 'SUPER_ADMIN';
   const [opnameLocFilter, setOpnameLocFilter] = useState<string>(
     lockedLocationId || 'ALL'
   );
@@ -343,7 +344,8 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
 
                         <td className="py-3 px-4 align-top text-right whitespace-nowrap">
                           <div className="inline-flex flex-col items-end gap-1.5">
-                            {roleProfile.permissions.canResolveDamage &&
+                            {isSuperAdmin &&
+                            roleProfile.permissions.canResolveDamage &&
                             d.status !== 'SELESAI_DIPERBAIKI' ? (
                               <div className="inline-flex flex-wrap justify-end items-center gap-1.5">
                                 {d.status === 'BARU_DILAPORKAN' && (
@@ -381,12 +383,27 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                               </div>
                             ) : (
                               <div className="inline-flex flex-wrap justify-end items-center gap-2">
-                                <span className="text-[11px] text-slate-400">
-                                  {d.status === 'SELESAI_DIPERBAIKI'
-                                    ? `Selesai ${formatDateID(d.resolvedDate ?? '')}`
-                                    : 'Menunggu Pengurus/Kasubag'}
-                                </span>
-                                {d.status === 'SELESAI_DIPERBAIKI' &&
+                                {!isSuperAdmin &&
+                                roleProfile.permissions.canResolveDamage &&
+                                d.status === 'BARU_DILAPORKAN' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onUpdateDamageStatus(d.id, 'DALAM_PENANGANAN')
+                                    }
+                                    className="px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded cursor-pointer"
+                                  >
+                                    Proses Teknisi
+                                  </button>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400">
+                                    {d.status === 'SELESAI_DIPERBAIKI'
+                                      ? `Selesai ${formatDateID(d.resolvedDate ?? '')}`
+                                      : 'Menunggu Super Admin'}
+                                  </span>
+                                )}
+                                {isSuperAdmin &&
+                                  d.status === 'SELESAI_DIPERBAIKI' &&
                                   roleProfile.permissions.canResolveDamage && (
                                     <button
                                       type="button"
@@ -402,33 +419,32 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                               </div>
                             )}
 
-                            <div className="inline-flex flex-wrap justify-end items-center gap-1.5">
-                              {onRequestMaintenanceForAsset &&
-                                d.status !== 'SELESAI_DIPERBAIKI' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onRequestMaintenanceForAsset(d.assetId)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded cursor-pointer"
-                                  >
-                                    <Wrench className="w-3 h-3" />
-                                    Ajukan Pemeliharaan (Nota Dinas)
-                                  </button>
-                                )}
-                              {d.status === 'BARU_DILAPORKAN' &&
-                                onCancelDamageReport &&
-                                (roleProfile.permissions.canReportDamage ||
-                                  roleProfile.permissions.canResolveDamage ||
-                                  roleProfile.permissions.canDeleteAsset) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onCancelDamageReport(d.id)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded cursor-pointer"
-                                  >
-                                    <XCircle className="w-3 h-3" />
-                                    Batalkan Laporan
-                                  </button>
-                                )}
-                            </div>
+                            {isSuperAdmin && (
+                              <div className="inline-flex flex-wrap justify-end items-center gap-1.5">
+                                {onRequestMaintenanceForAsset &&
+                                  d.status !== 'SELESAI_DIPERBAIKI' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onRequestMaintenanceForAsset(d.assetId)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#0B2545] bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded cursor-pointer"
+                                    >
+                                      <Wrench className="w-3 h-3" />
+                                      Ajukan Pemeliharaan (Nota Dinas)
+                                    </button>
+                                  )}
+                                {d.status === 'BARU_DILAPORKAN' &&
+                                  onCancelDamageReport && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onCancelDamageReport(d.id)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded cursor-pointer"
+                                    >
+                                      <XCircle className="w-3 h-3" />
+                                      Batalkan Laporan
+                                    </button>
+                                  )}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -531,13 +547,19 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                     <th className="py-3 px-4">Nama Barang & Lokasi</th>
                     <th className="py-3 px-4">Kondisi Tercatat</th>
                     <th className="py-3 px-4">Status Opname 2026</th>
-                    <th className="py-3 px-4 text-right no-print">Verifikasi Fisik</th>
+                    {roleProfile.id === 'SUPER_ADMIN' &&
+                      roleProfile.permissions.canPerformOpname && (
+                        <th className="py-3 px-4 text-right no-print">Verifikasi Fisik</th>
+                      )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-xs">
                   {opnameAssets.map((a) => {
                     const loc = locationMap.get(a.locationId);
                     const opMeta = OPNAME_STATUS_META[a.lastOpnameStatus];
+                    const canVerifyOpname =
+                      roleProfile.id === 'SUPER_ADMIN' &&
+                      roleProfile.permissions.canPerformOpname;
                     return (
                       <tr key={a.id} className="hover:bg-slate-50/70">
                         <td className="py-3 px-4 align-top whitespace-nowrap">
@@ -569,8 +591,8 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                           </div>
                         </td>
 
-                        <td className="py-3 px-4 align-top text-right whitespace-nowrap no-print">
-                          {roleProfile.permissions.canPerformOpname ? (
+                        {canVerifyOpname && (
+                          <td className="py-3 px-4 align-top text-right whitespace-nowrap no-print">
                             <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
@@ -617,10 +639,8 @@ export const OpnameReportView: React.FC<OpnameReportViewProps> = ({
                                 Selisih
                               </button>
                             </div>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">Hanya Baca</span>
-                          )}
-                        </td>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

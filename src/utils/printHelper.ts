@@ -25,6 +25,8 @@ export function buildAssetDetailUrl(
   };
 }
 
+export const KIR_LOGO_PATH = '/assets/logo-pemkab-sidoarjo.png';
+
 export function buildRoomDetailUrl(roomId: string): {
   fullUrl: string;
   pathUrl: string;
@@ -38,6 +40,45 @@ export function buildRoomDetailUrl(roomId: string): {
     fullUrl: `${getSafeOrigin()}${pathUrl}`,
     pathUrl,
   };
+}
+
+export function buildKirPrintUrl(
+  roomId?: string,
+  scope: 'current' | 'all' = 'current',
+  autoprint = true
+): { fullUrl: string; pathUrl: string } {
+  const params = new URLSearchParams({
+    print: 'kir',
+    scope,
+  });
+  if (scope === 'current' && roomId) {
+    params.set('ruang', roomId);
+  }
+  if (autoprint) {
+    params.set('autoprint', '1');
+  }
+  const pathUrl = `/?${params.toString()}`;
+  return {
+    fullUrl: `${getSafeOrigin()}${pathUrl}`,
+    pathUrl,
+  };
+}
+
+export async function fetchImageAsDataUrl(src: string): Promise<string | null> {
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () =>
+        resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -987,9 +1028,7 @@ export async function downloadKirPdf(
   sheets: KirSheetRenderData[],
   filename: string
 ): Promise<void> {
-  const logoImg = await loadImage(
-    '/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png'
-  );
+  const logoImg = await loadImage(KIR_LOGO_PATH);
   const allCanvases: HTMLCanvasElement[] = [];
   for (const s of sheets) {
     const pages = await renderKirSheetCanvases(s, logoImg);
@@ -1023,9 +1062,7 @@ export async function downloadKirPng(
   sheet: KirSheetRenderData,
   filename: string
 ): Promise<void> {
-  const logoImg = await loadImage(
-    '/assets/aistudio/logo-bpbd-sidoarjo-removebg-preview_e9477ae6.png'
-  );
+  const logoImg = await loadImage(KIR_LOGO_PATH);
   const canvases = await renderKirSheetCanvases(sheet, logoImg);
   if (canvases.length === 0) return;
   const dataUrl = canvases[0].toDataURL('image/png');
